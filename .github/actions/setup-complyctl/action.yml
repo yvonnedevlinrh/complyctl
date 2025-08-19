@@ -1,0 +1,102 @@
+name: "Setup complyctl environment"
+description: "Setup environment for complyctl running"
+
+inputs:
+  catalog_path:
+    description: "OSCAL content repo catalog path"
+    required: true
+  profile_path:
+    description: "OSCAL content repo profile path"
+    required: true
+  component_definition_path:
+    description: "OSCAL content repo component-definition path"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Install dependency on fedora
+    - name: Install dependency
+      run: dnf install wget make scap-security-guide git -y
+      shell: bash
+
+    # Configure Git for safe directory
+    - name: Configure Git for safe directory
+      run: git config --global --add safe.directory /__w/complyctl/complyctl
+      shell: bash
+
+    # Set up Go environment
+    - name: Set up Go
+      uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      with:
+        go-version-file: './go.mod'
+
+    # Build complyctl
+    - name: Build complyctl
+      run: make build
+      shell: bash
+
+    # Configure complyctl
+    - name: Config compyctl
+      run: |
+        cp ./bin/complyctl /usr/local/bin
+        complyctl list 2>/dev/null || true
+        # download OSCAL content
+        wget https://raw.githubusercontent.com/ComplianceAsCode/oscal-content/refs/heads/main/${{ inputs.profile_path }} -O $HOME/.local/share/complytime/controls/profile.json
+        wget https://raw.githubusercontent.com/ComplianceAsCode/oscal-content/refs/heads/main/${{ inputs.catalog_path }} -O $HOME/.local/share/complytime/controls/catalog.json
+        wget https://raw.githubusercontent.com/ComplianceAsCode/oscal-content/refs/heads/main/${{ inputs.component_definition_path }} -O $HOME/.local/share/complytime/bundles/component-definition.json
+        # update OSCAL content trestle path
+        sed -i 's|trestle://${{ inputs.catalog_path }}|trestle://controls/catalog.json|' $HOME/.local/share/complytime/controls/profile.json
+        sed -i 's|trestle://${{ inputs.profile_path }}|trestle://controls/profile.json|' $HOME/.local/share/complytime/bundles/component-definition.json
+        cp -rp bin/openscap-plugin $HOME/.local/share/complytime/plugins
+        checksum=$(sha256sum $HOME/.local/share/complytime/plugins/openscap-plugin| cut -d ' ' -f 1 )
+        cat > $HOME/.local/share/complytime/plugins/c2p-openscap-manifest.json << EOF
+        {
+          "metadata": {
+            "id": "openscap",
+            "description": "My openscap plugin",
+            "version": "0.0.1",
+            "types": [
+              "pvp"
+            ]
+          },
+          "executablePath": "openscap-plugin",
+          "sha256": "$checksum",
+          "configuration": [
+            {
+              "name": "workspace",
+              "description": "Directory for writing plugin artifacts",
+              "required": true
+            },
+            {
+              "name": "profile",
+              "description": "The OpenSCAP profile to run for assessment",
+              "required": true
+            },
+            {
+              "name": "datastream",
+              "description": "The OpenSCAP datastream to use. If not set, the plugin will try to determine it based on system information",
+              "required": false
+            },
+            {
+              "name": "policy",
+              "description": "The name of the generated tailoring file",
+              "default": "tailoring_policy.xml",
+              "required": false
+            },
+            {
+              "name": "arf",
+              "description": "The name of the generated ARF file",
+              "default": "arf.xml",
+              "required": false
+            },
+            {
+              "name": "results",
+              "description": "The name of the generated results file",
+              "default": "results.xml",
+              "required": false
+            }
+          ]
+        }
+        EOF
+      shell: bash
