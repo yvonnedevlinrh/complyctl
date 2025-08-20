@@ -1,4 +1,4 @@
-name: integration_test
+name: e2e_test
 
 on:
   push:
@@ -7,16 +7,16 @@ on:
   pull_request:
     types:
       - opened
-      - synchronize
-
-env:
-  COMPLYTIME_DEV_MODE: 1
+      - synchronize 
 
 permissions:
   contents: read
 
+env:
+  COMPLYTIME_DEV_MODE: 1
+
 jobs:
-  integration-test:
+  run-e2e:
     runs-on: ubuntu-latest
     container:
       image: fedora:latest
@@ -24,12 +24,11 @@ jobs:
       # Checkout the code from the repository
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      # Setup complyctl for further testing
+      
+      # Build and setup complyctl
       - name: Setup compyctl
         uses: ./.github/actions/setup-complyctl
 
-      # Test complyctl
-      - name: Test complyctl
-        run: |
-          complyctl list --plain
+      # Run e2e tests
+      - name: Run e2e tests
+        run: go test tests/e2e/e2e_test.go -v
