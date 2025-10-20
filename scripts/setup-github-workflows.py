@@ -3,15 +3,14 @@
 # Copyright Red Hat, Inc.
 
 import argparse
-import git
 import json
 import os
 import shutil
 import subprocess
+import tempfile
 
 from git import GitCommandError
 from git.repo import Repo
-from git.util import Actor
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -23,7 +22,6 @@ GITHUB_TOKEN = os.getenv('GITHUB_PAT')
 # The workflow is identified by the workflow filename or ID
 WORKFLOWS_PATH = '.github/workflows'
 COMMON_WORKFLOWS = ['codeql', 'scorecard', 'sonarcloud']
-DEST_PROJECT_ROOT = '/tmp'
 
 
 def parse_args():
@@ -78,7 +76,7 @@ def copy_workflow_file(workflow_filename, dest_project_path):
 
 
 def push_to_origin(repo_path, workflow, owner, repo_name):
-    workflow_branch = "workflow-" + workflow
+    workflow_branch = "auto-workflow-" + workflow
     repo = Repo(repo_path)
 
     print("Start to push updates to remote")
@@ -88,12 +86,33 @@ def push_to_origin(repo_path, workflow, owner, repo_name):
         raise RepoException(f"Git checkout failed: {e}") from e
     repo.git.add(os.path.join(WORKFLOWS_PATH, workflow + '.yml'))
 
-    commit_msg = "chore: add {} workflow file".format(workflow)
-    committer = Actor(name=GITHUB_USERNAME, email="noreply@redhat.com")
-    commit = repo.index.commit(commit_msg, committer=committer)
+    commit_msg = f"chore: auto add {workflow} workflow file"
+    repo.index.commit(commit_msg)
     remote = repo.remote()
     remote.set_url(f"https://{GITHUB_USERNAME}:{GITHUB_TOKEN}@github.com/{owner}/{repo_name}.git")
-    remote.push(refspec=f"HEAD:{workflow_branch}")
+    remote.push(refspec=f"HEAD:{workflow_branch}", force=True)
+    print("Done")
+    return workflow_branch
+
+
+def create_pull_request(workflow, owner, repo, workflow_branch):
+    pulls_path = f'/repos/{owner}/{repo}/pulls'
+    pulls_api = urljoin(GITHUB_API, pulls_path)
+    cmd_header = '-H "Accept: application/vnd.github+json" ' \
+                 f'-H "Authorization: Bearer {GITHUB_TOKEN}" ' \
+                 '-H "X-GitHub-Api-Version: 2022-11-28"'
+    data = {
+            "title": f"chore: auto workflow update for {workflow}",
+            "base": "main",
+            "head": f"{owner}:{workflow_branch}"
+    }
+    cmd = f'curl -L -s X POST {cmd_header} {pulls_api} -d \'{json.dumps(data)}\''
+
+    print(f"Creating a pull request for {workflow} workflow update")
+    try:
+        subprocess.check_call(cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(e)
     print("Done")
 
 
@@ -101,11 +120,11 @@ def check_workflows(repo_url):
     owner, repo = extract_owner_repo(repo_url)
     # Get all workflows and their states
     cmd_header = '-H "Accept: application/vnd.github+json" ' \
-                 '-H "Authorization: Bearer {}" ' \
-                 '-H "X-GitHub-Api-Version: 2022-11-28"'.format(GITHUB_TOKEN)
-    workflows_path = '/repos/{}/{}/actions/workflows'.format(owner, repo)
+                 f'-H "Authorization: Bearer {GITHUB_TOKEN}" ' \
+                 '-H "X-GitHub-Api-Version: 2022-11-28"'
+    workflows_path = f'/repos/{owner}/{repo}/actions/workflows'
     workflows_api = urljoin(GITHUB_API, workflows_path)
-    cmd = 'curl -L -s {} {}'.format(cmd_header, workflows_api)
+    cmd = f'curl -L -s {cmd_header} {workflows_api}'
     output = subprocess.check_output(cmd, shell=True)
 
     workflows = json.loads(output).get('workflows')
@@ -113,10 +132,11 @@ def check_workflows(repo_url):
     print("Workflows: " + str(workflow_dict))
 
     for workflow in COMMON_WORKFLOWS:
+        workflow_file = f'{workflow}.yml'
         if workflow in workflow_dict:
             if workflow_dict[workflow] != 'active':
-                enable_endpoint = '{}/{}/enable'.format(workflows_api, workflow + '.yml')
-                cmd = 'curl -L -X PUT -s {} {}'.format(cmd_header, enable_endpoint)
+                enable_endpoint = f'{workflows_api}/{workflow_file}/enable'
+                cmd = f'curl -L -X PUT -s {cmd_header} {enable_endpoint}'
                 print(f"Enabling {workflow}")
                 try:
                     subprocess.check_call(cmd, shell=True)
@@ -129,11 +149,9 @@ def check_workflows(repo_url):
             # For CodeQL, enable the workflow with default setup
             if workflow == 'codeql':
                 # For CodeQL, configure with default setup
-                codeql_endpoint = '{}/repos/{}/{}/code-scanning/default-setup'.format(
-                        GITHUB_API, owner, repo)
+                codeql_endpoint = f'{GITHUB_API}/repos/{owner}/{repo}/code-scanning/default-setup'
                 data = '{"state":"configured"}'
-                cmd = 'curl -L -X PATCH -s {} {} -d \'{}\''.format(
-                        cmd_header, codeql_endpoint, data)
+                cmd = f'curl -L -X PATCH -s {cmd_header} {codeql_endpoint} -d \'{data}\''
                 print(f"Configuring CodeQL: {cmd}")
                 try:
                     subprocess.check_call(cmd, shell=True)
@@ -142,23 +160,25 @@ def check_workflows(repo_url):
                 print("Done")
 
             else:
-                # Checkout the repo and copy workflow template to workflows directory
-                dest_project_path = os.path.join(DEST_PROJECT_ROOT, repo)
-                if not os.path.isdir(dest_project_path):
-                    cmd = 'git clone --quiet {}'.format(repo_url)
+                with tempfile.TemporaryDirectory() as dest_project_root:
+                    # Checkout the repo and copy workflow template to workflows directory
+                    cmd = f'git clone --quiet {repo_url}'
                     print(f"Checking out repo {repo_url}: {cmd}")
                     try:
-                        subprocess.check_call(cmd, cwd=DEST_PROJECT_ROOT, shell=True)
+                        subprocess.check_call(cmd, cwd=dest_project_root, shell=True)
                     except subprocess.CalledProcessError as e:
                         raise RuntimeError(e)
 
-                print(f"Copying {workflow} workflow file to {dest_project_path}")
-                copied = copy_workflow_file(workflow + '.yml', dest_project_path)
-                print("Done")
-                if copied:
-                    # Push the new workflow file to origin for review
-                    # Here may need some customization on the copied workflow 
-                    push_to_origin(dest_project_path, workflow, owner, repo)
+                    dest_project_path = os.path.join(dest_project_root, repo)
+                    print(f"Copying {workflow} workflow file to {dest_project_path}")
+                    copied = copy_workflow_file(workflow_file, dest_project_path)
+                    print("Done")
+                    if copied:
+                        # Push the new workflow file to origin for review
+                        # Here may need some customization on the copied workflow
+                        workflow_branch = push_to_origin(dest_project_path, workflow, owner, repo)
+                        if workflow_branch:
+                            create_pull_request(workflow, owner, repo, workflow_branch)
 
 
 def main():
