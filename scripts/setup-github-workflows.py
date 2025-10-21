@@ -17,6 +17,17 @@ from urllib.parse import urljoin
 
 GITHUB_API = "https://api.github.com"
 GITHUB_USERNAME = os.getenv('USERNAME')
+# GitHub PAT is needed to run this script, and GitHub recommends that you use a
+# fine-grained personal access token instead of a personal access token (classic)
+# whenever possible.
+# Ref: https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api?apiVersion=2022-11-28
+# The mininal required permissions for a find-grained token in this script include:
+# - Actions: read-only
+# - Administration: read and write
+# - Contents: read and write
+# - Metadata: read-only
+# - Pull requests: read and write
+# - Workflows: read and write
 GITHUB_TOKEN = os.getenv('GITHUB_PAT')
 
 # The workflow is identified by the workflow filename or ID
@@ -86,7 +97,7 @@ def push_to_origin(repo_path, workflow, owner, repo_name):
         raise RepoException(f"Git checkout failed: {e}") from e
     repo.git.add(os.path.join(WORKFLOWS_PATH, workflow + '.yml'))
 
-    commit_msg = f"chore: auto add {workflow} workflow file"
+    commit_msg = f"ci: auto add {workflow} workflow file"
     repo.index.commit(commit_msg)
     remote = repo.remote()
     remote.set_url(f"https://{GITHUB_USERNAME}:{GITHUB_TOKEN}@github.com/{owner}/{repo_name}.git")
@@ -102,7 +113,8 @@ def create_pull_request(workflow, owner, repo, workflow_branch):
                  f'-H "Authorization: Bearer {GITHUB_TOKEN}" ' \
                  '-H "X-GitHub-Api-Version: 2022-11-28"'
     data = {
-            "title": f"chore: auto workflow update for {workflow}",
+            "title": f"ci: auto workflow update for {workflow}",
+            "body": f"The update is for github {workflow} workflow.",
             "base": "main",
             "head": f"{owner}:{workflow_branch}"
     }
