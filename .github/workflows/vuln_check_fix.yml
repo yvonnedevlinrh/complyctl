@@ -115,7 +115,7 @@ jobs:
                 --title "chore: bump go version to ${{ env.FIXED_VERSION }} in gomod" \
                 --head "${{ env.BRANCH_NAME }}" \
                 --base "main" \
-                --reviewer "complytime-dev" \
+                --reviewer "complytime/complytime-dev" \
                 --body "${PR_BODY}"
             fi
           else
