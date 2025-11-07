@@ -1,6 +1,6 @@
 module github.com/complytime/complyctl
 
-go 1.24.6
+go 1.24.9
 
 require (
 	github.com/ComplianceAsCode/compliance-operator v1.7.0
