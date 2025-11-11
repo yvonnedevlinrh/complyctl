@@ -5,6 +5,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: none
+  issues: none
+  pull-requests: none
+  actions: none
+  security-events: read
+
 jobs:
   security_audit:
     name: OSV-Scanner
