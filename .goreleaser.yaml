@@ -82,3 +82,4 @@ signs:
       - "--yes" # needed on cosign 2.0.0+
     artifacts: checksum # only need to sign checksums
     output: true
+    bundle: false   # REQUIRED for cosign v2
