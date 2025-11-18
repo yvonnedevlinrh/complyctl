@@ -45,10 +45,13 @@ archives:
 
 changelog:
   sort: asc
+  use: github
+  format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} (@{{ . }}){{ end }}"
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - Merge pull request
   groups:
     - title: "New Features"
       regexp: '^.*?feat(\(.+\))??!?:.+$'
@@ -82,4 +85,3 @@ signs:
       - "--yes" # needed on cosign 2.0.0+
     artifacts: checksum # only need to sign checksums
     output: true
-    bundle: false   # REQUIRED for cosign v2
