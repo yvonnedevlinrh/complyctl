@@ -2,8 +2,16 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag to release (e.g., v1.2.3)'
+        required: true
+        type: string
 
-permissions: {}
+
+permissions:
+  contents: none
+  id-token: none
 
 jobs:
   release:
@@ -50,5 +58,5 @@ jobs:
           args: --verbose release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.event.inputs.tag }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
         continue-on-error: false
