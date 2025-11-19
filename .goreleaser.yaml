@@ -54,16 +54,22 @@ changelog:
     - title: "New Features"
       regexp: '^.*?feat(\(.+\))??!?:.+$'
       order: 100
-    - title: "Security updates"
+    - title: "Security Updates"
       regexp: '^.*?sec(\(.+\))??!?:.+$'
       order: 150
-    - title: "Bug fixes"
+    - title: "Bug Fixes"
       regexp: '^.*?(fix|refactor)(\(.+\))??!?:.+$'
       order: 200
-    - title: "Documentation updates"
-      regexp: ^.*?docs?(\(.+\))??!?:.+$
+    - title: "Dependency Updates"
+      regexp: '^.*chore\(deps\):.*$'
+      order: 250
+    - title: "Infrastructure Updates"
+      regexp: '^.*ci(\(.*\))?:.*$'
+      order: 300
+    - title: "Documentation Updates"
+      regexp: '^.*?docs?(\(.+\))??!?:.+$'
       order: 400
-    - title: Other work
+    - title: "Other Work"
       order: 9999
 
 sboms:
