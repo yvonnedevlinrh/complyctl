@@ -45,10 +45,13 @@ archives:
 
 changelog:
   sort: asc
+  use: github
+  format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} (@{{ . }}){{ end }}"
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - Merge pull request
   groups:
     - title: "New Features"
       regexp: '^.*?feat(\(.+\))??!?:.+$'
@@ -73,13 +76,11 @@ sboms:
 
 signs:
   - cmd: cosign
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - "sign-blob"
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
+      - "--bundle=${signature}"
       - "${artifact}"
-      - "--yes" # needed on cosign 2.0.0+
-    artifacts: checksum # only need to sign checksums
+      - "--yes"
+    artifacts: checksum
     output: true
-    bundle: false   # REQUIRED for cosign v2
