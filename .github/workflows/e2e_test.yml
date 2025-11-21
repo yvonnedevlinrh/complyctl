@@ -7,7 +7,7 @@ on:
   pull_request:
     types:
       - opened
-      - synchronize 
+      - synchronize
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
       # Checkout the code from the repository
       - name: Checkout code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      
+
       # Build and setup complyctl
       - name: Setup compyctl
         uses: ./.github/actions/setup-complyctl
