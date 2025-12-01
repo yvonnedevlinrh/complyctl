@@ -68,14 +68,18 @@ func defaultStyles() *charmlog.Styles {
 // NewLogger initializes a new wrapped logger with default styles
 func NewLogger(o io.Writer) hclog.Logger {
 	c := charmlog.NewWithOptions(o, *defaultOptions())
-	l := &CharmHclog{c}
+	l := &CharmHclog{
+		logger:   c,
+		logLevel: hclog.Info, // Default to Info level
+	}
 	l.logger.SetStyles(defaultStyles())
 	return l
 }
 
 // CharmHclog adapts the charm logger to the hashicorp logger.
 type CharmHclog struct {
-	logger *charmlog.Logger
+	logger   *charmlog.Logger
+	logLevel hclog.Level
 }
 
 // CharmHclog will implement the hclog.Logger.
@@ -111,6 +115,14 @@ func (c *CharmHclog) Debug(msg string, args ...interface{}) {
 	c.logger.Debug(msg, args...)
 }
 func (c *CharmHclog) Info(msg string, args ...interface{}) {
+	// Filter verbose messages from C2P unless in debug mode
+	if strings.Contains(msg, "generated finding for rule") {
+		if c.logLevel > hclog.Debug {
+			return
+		}
+		c.logger.Debug(msg, args...)
+		return
+	}
 	c.logger.Info(msg, args...)
 }
 func (c *CharmHclog) Warn(msg string, args ...interface{}) {
@@ -134,7 +146,10 @@ func (c *CharmHclog) IsError() bool { return false }
 func (c *CharmHclog) ImpliedArgs() []interface{} { return nil }
 
 func (c *CharmHclog) With(args ...interface{}) hclog.Logger {
-	return &CharmHclog{c.logger.With(args...)}
+	return &CharmHclog{
+		logger:   c.logger.With(args...),
+		logLevel: c.logLevel,
+	}
 }
 
 // The GetPrefix() method will return the prefix of the logger.
@@ -142,22 +157,29 @@ func (c *CharmHclog) Name() string { return c.logger.GetPrefix() }
 
 // The Named() method appends to the current logger prefix.
 func (c *CharmHclog) Named(name string) hclog.Logger {
-	return &CharmHclog{c.logger.WithPrefix(name)}
+	return &CharmHclog{
+		logger:   c.logger.WithPrefix(name),
+		logLevel: c.logLevel,
+	}
 }
 
 // The ResetNamed() method creates the logger with only the prefix passed.
 func (c *CharmHclog) ResetNamed(name string) hclog.Logger {
-	return &CharmHclog{c.logger.WithPrefix(name)}
+	return &CharmHclog{
+		logger:   c.logger.WithPrefix(name),
+		logLevel: c.logLevel,
+	}
 }
 
 // The SetLevel() method enables setting logger level.
 func (c *CharmHclog) SetLevel(level hclog.Level) {
+	c.logLevel = level
 	c.logger.SetLevel(hclogCharmLevels[level])
 }
 
 // The GetLevel() method returns the current level.
 func (c *CharmHclog) GetLevel() hclog.Level {
-	return charmHclogLevels[c.logger.GetLevel()]
+	return c.logLevel
 }
 
 // The StandardLog() of CharmHclog is returned, wrapping go-hclog.
