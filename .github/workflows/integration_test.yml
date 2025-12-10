@@ -33,9 +33,9 @@ jobs:
         uses: ./.github/actions/setup-complyctl
         # This is the test data for a specific product, and it may be updated in the future if necessary.
         with:
-          product: $PRODUCT
-          catalog: $CATALOG
-          profile: $PROFILE
+          product: "$PRODUCT"
+          catalog: "$CATALOG"
+          profile: "$PROFILE"
 
       - name: Test complyctl list
         run: |
