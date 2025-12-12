@@ -30,4 +30,4 @@ jobs:
 
       # Step 4: Run Go tests
       - name: Run unit tests
-        run: go test -v $(go list ./... | grep -v /tests)
+        run: go list ./... | grep -v /tests | xargs go test -v
