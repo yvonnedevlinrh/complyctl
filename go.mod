@@ -16,7 +16,7 @@ require (
 	github.com/hashicorp/go-plugin v1.7.0
 	github.com/oscal-compass/compliance-to-policy-go/v2 v2.0.0-rc.1
 	github.com/oscal-compass/oscal-sdk-go v0.0.9
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 )
