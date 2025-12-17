@@ -96,15 +96,6 @@ var hclogCharmLevels = map[hclog.Level]charmlog.Level{
 	hclog.Off:     charmlog.FatalLevel, // There is no "Off" level equivalent in charm logger
 }
 
-// Declaring charmHclogLevels to map key: value pairs for adapting go-hclog to charmlog.
-var charmHclogLevels = map[charmlog.Level]hclog.Level{
-	charmlog.DebugLevel: hclog.Debug,
-	charmlog.InfoLevel:  hclog.Info,
-	charmlog.WarnLevel:  hclog.Warn,
-	charmlog.ErrorLevel: hclog.Error,
-	charmlog.FatalLevel: hclog.Error, // There is no "fatal" equivalent in go-hclog
-}
-
 func (c *CharmHclog) Log(level hclog.Level, msg string, args ...interface{}) {
 	c.logger.Log(hclogCharmLevels[level], fmt.Sprintf(msg, args...))
 }
