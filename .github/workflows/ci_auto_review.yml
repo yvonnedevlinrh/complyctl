@@ -1,0 +1,26 @@
+name: Gemini AI Code Review
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: none
+  pull-requests: none
+  issues: none
+  actions: none
+
+jobs:
+  call-gemini-review:
+    # 1. Reference the remote workflow
+    uses: complytime/org-infra/.github/workflows/reusable_gemini_review.yml@main
+
+    # 2. Pass the defined 'inputs' via 'with'
+    with:
+      google_cloud_project: 'complytime-test'
+      google_cloud_location: 'us-central1'
+
+    # 3. Pass the secrets required by the reusable workflow's internal steps
+    secrets:
+      GH_APP_ID: ${{ secrets.APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      credentials_json: ${{ secrets.GCP_SA_KEY }}
