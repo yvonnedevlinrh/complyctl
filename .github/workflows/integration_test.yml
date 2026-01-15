@@ -62,13 +62,10 @@ jobs:
           cat << EOF > config.yml
           frameworkId: cusp_fedora
           includeControls:
-            - controlId: cusp_fedora_4-1
-              controlTitle: Account Protection
+            - controlId: cusp_fedora_3-6
+              controlTitle: Files, Permissions, and Ownership
               includeRules:
-                - accounts_umask_etc_login_defs
-              selectParameters:
-                - name: var_accounts_user_umask
-                  value: "027"
+                - file_permissions_etc_passwd
           EOF
 
       - name: Test complyctl plan with customized config
@@ -90,26 +87,53 @@ jobs:
       - name: Test complyctl generate
         run: complyctl generate
 
+      # Set incorrect permissions on /etc/passwd to make the scan fail
+      - name: Set incorrect passwd permissions
+        if: ${{ matrix.assessment-plan-status == 'customized'}}
+        run: |
+          echo "Current /etc/passwd permissions:"
+          ls -l /etc/passwd
+          chmod 666 /etc/passwd
+          echo "After setting to 666 (world-writable):"
+          ls -l /etc/passwd
+
       - name: Test complyctl scan
         run: complyctl scan --with-md
 
-      # Check content_rule_accounts_umask_etc_login_defs scan result, it should be fail
+      # Check file_permissions_etc_passwd scan result, it should be fail
       - name: Check assessment-result
+        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: |
-          jq -e -r '.["assessment-results"].results[].observations[] |
-          select(.title == "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs").subjects[].props[] |
-          select(.name=="result").value == "fail"' complytime/assessment-results.json
+          echo "Checking file_permissions_etc_passwd rule result..."
 
-      # Update /etc/login.defs UMASK to 027
-      - name: Update login defs umask
-        run: sed -i 's/^UMASK\t*022/UMASK\t027/' /etc/login.defs
+          RESULT=$(jq -r '.["assessment-results"].results[].observations[] |
+          select(.title == "xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd").subjects[].props[] |
+          select(.name=="result").value' complytime/assessment-results.json)
+
+          echo "Result: $RESULT"
+          [ "$RESULT" = "fail" ] || exit 1
+
+      # Fix passwd permissions to make the scan pass
+      - name: Fix passwd permissions
+        if: ${{ matrix.assessment-plan-status == 'customized'}}
+        run: |
+          chmod 644 /etc/passwd
+          echo "Set /etc/passwd permissions to 644:"
+          ls -l /etc/passwd
 
       - name: Scan again
+        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: complyctl scan --with-md
 
-      # Check content_rule_accounts_umask_etc_login_defs scan result, it should be pass
-      - name: Check assessment-result after modify login defs umask
+      # Check file_permissions_etc_passwd scan result, it should be pass
+      - name: Check assessment-result after fixing permissions
+        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: |
-          jq -e -r '.["assessment-results"].results[].observations[] |
-          select(.title == "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs").subjects[].props[] |
-          select(.name=="result").value == "pass"' complytime/assessment-results.json
+          echo "Checking file_permissions_etc_passwd rule result after fix..."
+
+          RESULT=$(jq -r '.["assessment-results"].results[].observations[] |
+          select(.title == "xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd").subjects[].props[] |
+          select(.name=="result").value' complytime/assessment-results.json)
+
+          echo "Result: $RESULT"
+          [ "$RESULT" = "pass" ] || exit 1
