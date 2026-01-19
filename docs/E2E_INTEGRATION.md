@@ -4,7 +4,11 @@ This document provides an overview of the End-to-End (E2E) and integration tests
 
 ## Overview
 
-The E2E (End-to-End) and integration tests are designed to verify that the `complyctl` commands function correctly in a real-world environment. The E2E tests, located in [e2e_test.go](../tests/e2e/e2e_test.go), are written in Go and utilize the testing package. These tests execute the complyctl binary and validate its output through assertions. The integration tests, on the other hand, are implemented within the GitHub workflow file [integration_test.yml](../.github/workflow/integration_test.yml).
+The E2E (End-to-End) and integration tests are designed to verify that the `complyctl` commands function correctly
+in a real-world environment. The E2E tests, located in [e2e_test.go](../tests/e2e/e2e_test.go), are written in Go
+and utilize the testing package. These tests execute the complyctl binary and validate its output through assertions.
+The integration tests, on the other hand, are implemented within the GitHub workflow file
+[integration_test.yml](../.github/workflow/integration_test.yml).
 
 ## How to Run Tests
 
@@ -25,7 +29,7 @@ The following is a list of the existing E2E test cases:
 
 The following is a list of the existing integration test cases:
 - **Running whole workflow:** Run `list`, `plan`, `generate`, `scan` of `complyctl` twice with OSCAL fedora cusp contents, first with original OSCAL assessment-plan, second with customized OSCAL assessment-plan.
-- **Validate scan result:** Validate rule `xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs` scan result, first it should `fail`, after change the umask, it should `pass`.  
+- **Validate scan result:** For both original and customized runs, validate rule `xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd` scan result. First it should `fail` (when permissions are 666), after setting permissions to 644, it should `pass`.
 - **Validate original assessment-plan** via [go-oscal](https://github.com/defenseunicorns/go-oscal)
 - **Validate customized assessment-plan** via [go-oscal](https://github.com/defenseunicorns/go-oscal)
 
@@ -33,10 +37,10 @@ The following is a list of the existing integration test cases:
 
 To add a new E2E test case, you can follow these steps:
 
-1.  Open the `tests/e2e/e2e_test.go` file.
-2.  Create a new function with the `Test` prefix (e.g., `TestMyNewCommand`).
-3.  Use the `os/exec` package to run the `complyctl` command with the desired arguments.
-4.  Use the `assert` and `require` packages from `testify` to assert the output of the command.
-5.  Run the tests to ensure that your new test case passes.
+1. Open the `tests/e2e/e2e_test.go` file.
+2. Create a new function with the `Test` prefix (e.g., `TestMyNewCommand`).
+3. Use the `os/exec` package to run the `complyctl` command with the desired arguments.
+4. Use the `assert` and `require` packages from `testify` to assert the output of the command.
+5. Run the tests to ensure that your new test case passes.
 
 To add new test steps for integration test, directly edit the [integration_test.yml](../.github/workflow/integration_test.yml)
