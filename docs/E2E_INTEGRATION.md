@@ -29,7 +29,7 @@ The following is a list of the existing E2E test cases:
 
 The following is a list of the existing integration test cases:
 - **Running whole workflow:** Run `list`, `plan`, `generate`, `scan` of `complyctl` twice with OSCAL fedora cusp contents, first with original OSCAL assessment-plan, second with customized OSCAL assessment-plan.
-- **Validate scan result:** Validate rule `xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd` scan result, first it should `fail` (when permissions are 666), after setting permissions to 644, it should `pass`.
+- **Validate scan result:** For both original and customized runs, validate rule `xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd` scan result. First it should `fail` (when permissions are 666), after setting permissions to 644, it should `pass`.
 - **Validate original assessment-plan** via [go-oscal](https://github.com/defenseunicorns/go-oscal)
 - **Validate customized assessment-plan** via [go-oscal](https://github.com/defenseunicorns/go-oscal)
 

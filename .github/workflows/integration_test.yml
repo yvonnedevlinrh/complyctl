@@ -89,7 +89,6 @@ jobs:
 
       # Set incorrect permissions on /etc/passwd to make the scan fail
       - name: Set incorrect passwd permissions
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: |
           echo "Current /etc/passwd permissions:"
           ls -l /etc/passwd
@@ -102,7 +101,6 @@ jobs:
 
       # Check file_permissions_etc_passwd scan result, it should be fail
       - name: Check assessment-result
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: |
           echo "Checking file_permissions_etc_passwd rule result..."
 
@@ -115,19 +113,16 @@ jobs:
 
       # Fix passwd permissions to make the scan pass
       - name: Fix passwd permissions
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: |
           chmod 644 /etc/passwd
           echo "Set /etc/passwd permissions to 644:"
           ls -l /etc/passwd
 
       - name: Scan again
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: complyctl scan --with-md
 
       # Check file_permissions_etc_passwd scan result, it should be pass
       - name: Check assessment-result after fixing permissions
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
         run: |
           echo "Checking file_permissions_etc_passwd rule result after fix..."
 
