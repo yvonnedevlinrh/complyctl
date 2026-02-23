@@ -15,6 +15,10 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 
+class RepoException(Exception):
+    """Raised when a git repository operation fails."""
+
+
 GITHUB_API = "https://api.github.com"
 GITHUB_USERNAME = os.getenv('USERNAME')
 # GitHub PAT is needed to run this script, and GitHub recommends that you use a
@@ -76,13 +80,14 @@ def copy_workflow_file(workflow_filename, dest_project_path):
     if os.path.exists(dest_file_path):
         print(f"{workflow_filename} already exists in {dest_project_path}.")
         return False
-    else:
-        try:
-            shutil.copy(src_file_path, dest_file_path)
-        except FileNotFoundError:
-            print(f"Error: Source file {src_file_path} not found.")
-        except Exception as e:
-            print(f"An error occurred while copying file {src_file_path}: {e}")
+    try:
+        shutil.copy(src_file_path, dest_file_path)
+    except FileNotFoundError:
+        print(f"Error: Source file {src_file_path} not found.")
+        return False
+    except Exception as e:
+        print(f"An error occurred while copying file {src_file_path}: {e}")
+        return False
     return True
 
 
@@ -124,7 +129,7 @@ def create_pull_request(workflow, owner, repo, workflow_branch):
     try:
         subprocess.check_call(cmd, shell=True)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(e)
+        raise RuntimeError(e) from e
     print("Done")
 
 
@@ -153,7 +158,7 @@ def check_workflows(repo_url):
                 try:
                     subprocess.check_call(cmd, shell=True)
                 except subprocess.CalledProcessError as e:
-                    raise RuntimeError(e)
+                    raise RuntimeError(e) from e
                 print("Done")
 
         # Otherwise, add the workflow file or enable with configuration
@@ -168,7 +173,7 @@ def check_workflows(repo_url):
                 try:
                     subprocess.check_call(cmd, shell=True)
                 except subprocess.CalledProcessError as e:
-                    raise RuntimeError(e)
+                    raise RuntimeError(e) from e
                 print("Done")
 
             else:
@@ -179,7 +184,7 @@ def check_workflows(repo_url):
                     try:
                         subprocess.check_call(cmd, cwd=dest_project_root, shell=True)
                     except subprocess.CalledProcessError as e:
-                        raise RuntimeError(e)
+                        raise RuntimeError(e) from e
 
                     dest_project_path = os.path.join(dest_project_root, repo)
                     print(f"Copying {workflow} workflow file to {dest_project_path}")
