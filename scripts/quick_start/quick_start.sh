@@ -11,10 +11,7 @@
 
 set +e
 # Check if the scap-security-guide package is available in the enabled repositories
-dnf provides scap-security-guide
-
-# Check the exit status of the previous command
-if [ $? -ne 0 ]; then
+if ! dnf provides scap-security-guide; then
     echo "No working repository is available to install scap-security-guide."
 
     # Check if RHEL_APPS_REPO variable is set
@@ -39,18 +36,18 @@ dnf update -y
 dnf install git wget make scap-security-guide -y
 rm -rf /usr/bin/go
 go_mod="https://raw.githubusercontent.com/complytime/complyctl/main/go.mod"
-go_version=$(curl -s $go_mod | grep '^go' | awk '{print $2}')
-go_tar_file=go$go_version.linux-amd64.tar.gz
+go_version=$(curl -s "$go_mod" | grep '^go' | awk '{print $2}')
+go_tar_file="go${go_version}.linux-amd64.tar.gz"
 wget "https://go.dev/dl/$go_tar_file"
 tar -C /usr/local -xvzf "$go_tar_file"
 rm -rf "$go_tar_file"
-export PATH=$PATH:/usr/local/go/bin
+export PATH="$PATH:/usr/local/go/bin"
 source ~/.bash_profile
 
 # Install and build complyctl
 echo "Cloning the complyctl repository..."
-complyctlrepo="${REPO:-"https://github.com/complytime/complyctl"}"
-complyctlbranch="${BRANCH:-"main"}"
+complyctlrepo="${REPO:-https://github.com/complytime/complyctl}"
+complyctlbranch="${BRANCH:-main}"
 git clone -b "${complyctlbranch}" "${complyctlrepo}"
 cd complyctl && make build && cp ./bin/complyctl /usr/local/bin
 echo "complyctl installed successfully!"
@@ -66,7 +63,7 @@ cp docs/samples/sample-profile.json docs/samples/sample-catalog.json ~/.local/sh
 
 # Copy the binary plugin and manifest files
 cp -rp bin/openscap-plugin ~/.local/share/complytime/plugins
-checksum=$(sha256sum ~/.local/share/complytime/plugins/openscap-plugin| cut -d ' ' -f 1 )
+checksum=$(sha256sum ~/.local/share/complytime/plugins/openscap-plugin | cut -d ' ' -f 1)
 cat > ~/.local/share/complytime/plugins/c2p-openscap-manifest.json << EOF
 {
   "metadata": {
