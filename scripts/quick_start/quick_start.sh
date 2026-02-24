@@ -42,8 +42,6 @@ wget "https://go.dev/dl/$go_tar_file"
 tar -C /usr/local -xvzf "$go_tar_file"
 rm -rf "$go_tar_file"
 export PATH="$PATH:/usr/local/go/bin"
-source ~/.bash_profile
-
 # Install and build complyctl
 echo "Cloning the complyctl repository..."
 complyctlrepo="${REPO:-https://github.com/complytime/complyctl}"
