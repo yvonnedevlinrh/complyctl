@@ -31,6 +31,7 @@ def _check_spdx(lines: list[str]) -> bool:
     for line in lines[:3]:
         if SPDX_LINE in line:
             return True
+    return False
 
 
 def _write_file(file_path: Path, lines: list[str]) -> None:

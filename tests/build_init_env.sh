@@ -14,11 +14,11 @@
 URL="https://raw.githubusercontent.com/ComplianceAsCode/oscal-content/refs/heads/main/"
 WDIR=".local/share/complytime"
 
-product=$1
-catalog=$2
-profile=$3
+product="$1"
+catalog="$2"
+profile="$3"
 
-if [ $# -lt 3 ]; then
+if [ "$#" -lt 3 ]; then
     echo "Please provide the necessary inputs."
     exit 1
 fi
@@ -31,15 +31,15 @@ set +e
 complyctl list 2>/dev/null
 echo "The error is expected because there is no content, this will create needed directoris for further test."
 # Download OSCAL content
-wget $URL/profiles/$3/profile.json -O $HOME/$WDIR/controls/profile.json
-wget $URL/catalogs/$2/catalog.json -O $HOME/$WDIR/controls/catalog.json
-wget $URL/component-definitions/$1/$3/component-definition.json -O $HOME/$WDIR/bundles/component-definition.json
+wget "$URL/profiles/$profile/profile.json" -O "$HOME/$WDIR/controls/profile.json"
+wget "$URL/catalogs/$catalog/catalog.json" -O "$HOME/$WDIR/controls/catalog.json"
+wget "$URL/component-definitions/$product/$profile/component-definition.json" -O "$HOME/$WDIR/bundles/component-definition.json"
 # Update trestle path
-sed -i "s|trestle://catalogs/$2/catalog.json|trestle://controls/catalog.json|" $HOME/$WDIR/controls/profile.json
-sed -i "s|trestle://profiles/$3/profile.json|trestle://controls/profile.json|" $HOME/$WDIR/bundles/component-definition.json
+sed -i "s|trestle://catalogs/$catalog/catalog.json|trestle://controls/catalog.json|" "$HOME/$WDIR/controls/profile.json"
+sed -i "s|trestle://profiles/$profile/profile.json|trestle://controls/profile.json|" "$HOME/$WDIR/bundles/component-definition.json"
 # Setup plugin
-cp -rp bin/openscap-plugin $HOME/$WDIR/plugins
-checksum=$(sha256sum $HOME/$WDIR/plugins/openscap-plugin| cut -d " " -f 1 )
+cp -rp bin/openscap-plugin "$HOME/$WDIR/plugins"
+checksum=$(sha256sum "$HOME/$WDIR/plugins/openscap-plugin" | cut -d " " -f 1)
 jq --arg new_sum "$checksum" '.sha256 = $new_sum' "docs/samples/c2p-openscap-manifest.json" > "docs/samples/c2p-openscap-manifest.json.tmp"
-mv docs/samples/c2p-openscap-manifest.json.tmp $HOME/$WDIR/plugins/c2p-openscap-manifest.json
+mv docs/samples/c2p-openscap-manifest.json.tmp "$HOME/$WDIR/plugins/c2p-openscap-manifest.json"
 echo "Build and init finished."
