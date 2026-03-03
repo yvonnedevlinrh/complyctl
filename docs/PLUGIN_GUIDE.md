@@ -1,92 +1,175 @@
-# Plugin Authoring
+# Plugin Guide
 
-Complyctl can be extended to support desired policy engines (PVPs) by the use of plugins.
-The plugin acts as the integration between complyctl and the PVPs native interface.
-Each plugin is responsible for converting the policy content described in OSCAL into the input format expected by the PVP.
-In addition, the plugin converts the raw results provided by the PVP into the schema used by complyctl to generate OSCAL output.
+complyctl extends to arbitrary policy engines through plugins. Each plugin is a standalone executable that communicates with the CLI via gRPC using the [hashicorp/go-plugin](https://github.com/hashicorp/go-plugin) framework.
 
-Plugins communicate with complyctl via gRPC and can be authored using any preferred language.
-The plugin acts as the gRPC server while the complyctl CLI acts as the client.
-When a `complyctl` command is run, it invokes the appropriate method served by the plugin.
+## Discovery
 
-Complyctl is built on [compliance-to-policy-go](https://github.com/oscal-compass/compliance-to-policy-go/ which provides a flexible plugin framework for leveraging OSCAL with various PVPs. For developers choosing Golang, the same SDK can be used for plugin authoring.
-
-## Plugin Discovery
-
-Complyctl performs automated plugin discovery using the compliance-to-policy-go [plugin manager](https://github.com/complytime/compliance-to-policy-go/blob/CPLYTM-272/plugin/discovery.go).
-Plugins are defined using manifest files placed in the `c2p-plugins` directory.
-The plugin manifest is a JSON file that provides metadata about the plugin.
-Check the quick start [guide](QUICK_START.md) to see an example.
-
-**Note:** the plugin manifest file must have the following syntax for automatic discovery: `c2p-<plugin name>-manifest.json`
-
-### Example Plugin Manifest
+Scanning providers are discovered by scanning `~/.complytime/providers/` for executables matching the naming convention:
 
 ```
-{
-	“id”: “myplugin”,
-	“description”: “my example plugin”,
-	“version”: “0.1”,
-	“type”: [“pvp”],
-	“executablePath”: "myplugin" // in relation to the plugin directory
-	“sha256”: “23f…” // sha256 of executable
-	"configuration": [
-      {
-        "name": "config_name",
-        "description": "Config description",
-        "default": "default_value",
-        "required": true
-      },
-	]
-}
+complyctl-provider-<evaluator-id>
 ```
 
-### Directory Naming Conventions
+The CLI strips the `complyctl-provider-` prefix to derive the **evaluator ID** used for routing Generate and Scan requests.
 
-In order to support automated aggregation of output files from multiple plugins the following directory names are expected by complyctl :
+| Example Binary | Evaluator ID |
+|:---|:---|
+| `complyctl-provider-openscap` | `openscap` |
+| `complyctl-provider-kubernetes` | `kubernetes` |
+| `complyctl-provider-test` | `test` |
 
-**Note:** The `workspace` path will be provided by complyctl via the [configuration](https://github.com/complytime/complyctl/blob/6cf2e92aff852119bba83e579e2c6d8700e4bcec/internal/complytime/plugins.go#L72) and represents the user's desired working directory for all complyctl activities.
+No manifest files, no configuration files. The executable must be in the plugin directory and have execute permission.
 
-- `{workspace}/{plugin name}/results` # files for evidence collection
-- `{workspace}/{plugin name}/remediations` # files for automated remediation
+## gRPC Interface
 
-### Plugin Selection
-
-Complyctl generates a mapping of plugins to validation components at runtime.
-This mapping uses the `title` of the validation component to find a matching plugin with that ID (defined in manifest).
-
-```json
-{
-	...
-	“uuid”: “701c7...”,
-	“type”: “validation,
-	“title”: “myplugin”, // name must match plugin ID in manifest
-}
-```
-
-## Example
-
-Below shows an example template for authoring a Golang plugin.
+Plugins implement the `Plugin` interface (defined in `pkg/plugin/manager.go`):
 
 ```go
+type Plugin interface {
+    Describe(ctx context.Context, req *DescribeRequest) (*DescribeResponse, error)
+    Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
+    Scan(ctx context.Context, req *ScanRequest) (*ScanResponse, error)
+}
+```
 
-import "github.com/oscal-compass/compliance-to-policy-go/v2/policy"
+### Describe
 
-type PluginServer struct {}
+Called during plugin discovery and `complyctl doctor` diagnostics. Returns plugin health, version, and declared variable requirements (`RequiredGlobalVariables`, `RequiredTargetVariables`). Plugins that return `Healthy: false` or fail the RPC are skipped during loading.
 
-func (s PluginServer) Generate(p policy.Policy) error {
+### Generate
 
-	// PluginServer should implement the Generate() method to provide logic for
-	// translating OSCAL to the PVPs expected input format.  Note: this may not be
-	// applicable to all PVPs.
+Called by `complyctl generate`. Receives a three-tier variable model (R48):
 
+| Tier | Field | Source |
+|:---|:---|:---|
+| 1 — Global | `GlobalVariables` | `complytime.yaml` top-level `variables` |
+| 2 — Target | `TargetVariables` | `complytime.yaml` `targets[].variables` (one target per call) |
+| 3 — Test | `Configuration[].Parameters` | Per-requirement parameters from the assessment plan |
+
+The plugin prepares declarative policies in whatever format the underlying engine expects.
+
+### Scan
+
+Called by `complyctl scan`. Receives targets only — no requirement IDs are sent. The provider evaluates all requirements from Generate-time state (R47). Returns `AssessmentLog` entries — one per requirement evaluated — each containing steps with pass/fail/skip/error results and a `ConfidenceLevel` enum.
+
+## Protobuf Contract
+
+The canonical protobuf definition lives at `api/plugin/plugin.proto`. Key types:
+
+| Type | Purpose |
+|:---|:---|
+| `GenerateRequest` | Global variables, target variables, assessment configurations |
+| `AssessmentConfiguration` | Plan ID, requirement ID, parameters map |
+| `Target` | Target ID + plugin-defined variables |
+| `AssessmentLog` | Requirement ID, steps, message, confidence level |
+| `Step` | Name, result, message |
+| `DescribeResponse` | Health, version, required global/target variable names |
+| `ConfidenceLevel` | Enum: NOT_SET, UNDETERMINED, LOW, MEDIUM, HIGH |
+| `Result` | Enum: UNSPECIFIED, PASSED, FAILED, SKIPPED, ERROR |
+
+## Authoring a Plugin (Go)
+
+Use `plugin.Serve()` to register and start the gRPC server. The handshake is handled automatically.
+
+```go
+package main
+
+import (
+    "context"
+
+    "github.com/complytime/complyctl/pkg/plugin"
+)
+
+var _ plugin.Plugin = (*myPlugin)(nil)
+
+type myPlugin struct{}
+
+func (p *myPlugin) Describe(_ context.Context, _ *plugin.DescribeRequest) (*plugin.DescribeResponse, error) {
+    return &plugin.DescribeResponse{
+        Healthy: true,
+        Version: "1.0.0",
+        RequiredGlobalVariables: []string{"output_dir"},
+        RequiredTargetVariables: []string{"kubeconfig"},
+    }, nil
 }
 
-func (s PluginServer) GetResults(p policy.Policy) (policy.PVPResult, error) {
-
-	// PluginServer should implement the GetResults() method to provide logic to
-	// collect results from the PVP for a given policy.  Note: if the PVP requires input
-	// from Generate() then the policy input here may be ignored.
-
+func (p *myPlugin) Generate(_ context.Context, req *plugin.GenerateRequest) (*plugin.GenerateResponse, error) {
+    _ = req.GlobalVariables
+    _ = req.TargetVariables
+    for _, cfg := range req.Configuration {
+        _ = cfg.RequirementID
+        _ = cfg.Parameters
+    }
+    return &plugin.GenerateResponse{Success: true}, nil
 }
+
+func (p *myPlugin) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin.ScanResponse, error) {
+    var assessments []plugin.AssessmentLog
+    for _, target := range req.Targets {
+        assessments = append(assessments, plugin.AssessmentLog{
+            RequirementID: target.TargetID + "-check",
+            Steps: []plugin.Step{{
+                Name:    "my-check",
+                Result:  plugin.ResultPassed,
+                Message: "check passed",
+            }},
+            Message:    "evaluation complete",
+            Confidence: plugin.ConfidenceLevelHigh,
+        })
+    }
+    return &plugin.ScanResponse{Assessments: assessments}, nil
+}
+
+func main() {
+    plugin.Serve(&myPlugin{})
+}
+```
+
+Build and install:
+
+```bash
+go build -o complyctl-provider-myplugin ./cmd/myplugin
+cp complyctl-provider-myplugin ~/.complytime/providers/
+```
+
+## Routing
+
+The CLI routes requests based on **evaluator ID** extracted from the Gemara policy graph:
+
+1. Policy assessment configs include an `evaluator_id` field
+2. CLI groups configs by evaluator ID
+3. Each group is dispatched to the matching plugin
+4. If no match is found, the request is broadcast to all loaded plugins
+
+## Variables
+
+Plugins receive variables through a three-tier model (R48):
+
+| Tier | Config Location | Delivered Via | Scope |
+|:---|:---|:---|:---|
+| Global | `complytime.yaml` `variables` | `GenerateRequest.GlobalVariables` | Workspace-wide |
+| Target | `complytime.yaml` `targets[].variables` | `GenerateRequest.TargetVariables` (Generate) / `Target.Variables` (Scan) | Per-target |
+| Test | Assessment plan parameters | `AssessmentConfiguration.Parameters` | Per-requirement |
+
+Plugins declare their required variable names via the `Describe` RPC (`RequiredGlobalVariables`, `RequiredTargetVariables`). The `complyctl doctor` command validates these exist in the workspace config (R51).
+
+```yaml
+variables:
+  output_dir: /tmp/scan-results
+
+targets:
+  - id: production-cluster
+    policies:
+      - nist-800-53-r5
+    variables:
+      kubeconfig: /path/to/kubeconfig
+      namespace: default
+```
+
+## Reference Implementation
+
+See `cmd/test-plugin/main.go` for a complete working example. Build with:
+
+```bash
+make build-test-plugin
 ```

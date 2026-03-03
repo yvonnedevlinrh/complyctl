@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ComplianceAsCode/compliance-operator/pkg/xccdf"
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
+	"github.com/hashicorp/go-hclog"
 
-	"github.com/complytime/complyctl/cmd/openscap-plugin/config"
+	xccdf "github.com/complytime/complyctl/cmd/openscap-plugin/xccdftype"
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 const (
@@ -75,12 +75,12 @@ func validateVariableExistence(policyVariableID string, dsVariables []DsVariable
 	return false
 }
 
-func unselectAbsentRules(tailoringSelections, dsProfileSelections []xccdf.SelectElement, oscalPolicy policy.Policy) []xccdf.SelectElement {
+func unselectAbsentRules(tailoringSelections, dsProfileSelections []xccdf.SelectElement, configuration []plugin.AssessmentConfiguration) []xccdf.SelectElement {
 	for _, dsRule := range dsProfileSelections {
 		dsRuleAlsoInPolicy := false
 		ruleID := removePrefix(dsRule.IDRef, ruleIDPrefix)
-		for _, rule := range oscalPolicy {
-			if ruleID == rule.Rule.ID {
+		for _, cfg := range configuration {
+			if ruleID == cfg.RequirementID {
 				dsRuleAlsoInPolicy = true
 				break
 			}
@@ -95,22 +95,21 @@ func unselectAbsentRules(tailoringSelections, dsProfileSelections []xccdf.Select
 	return tailoringSelections
 }
 
-func selectAdditionalRules(tailoringSelections, dsProfileSelections []xccdf.SelectElement, oscalPolicy policy.Policy) []xccdf.SelectElement {
+func selectAdditionalRules(tailoringSelections, dsProfileSelections []xccdf.SelectElement, configuration []plugin.AssessmentConfiguration) []xccdf.SelectElement {
 	rulesMap := make(map[string]bool)
 
-	for _, rule := range oscalPolicy {
+	for _, cfg := range configuration {
 		ruleAlreadyInDsProfile := false
 		for _, dsRule := range dsProfileSelections {
 			dsRuleID := removePrefix(dsRule.IDRef, ruleIDPrefix)
-			if rule.Rule.ID == dsRuleID {
-				// Not a common case, but a rule can be unselected in a Datastream Profile
+			if cfg.RequirementID == dsRuleID {
 				if dsRule.Selected {
 					ruleAlreadyInDsProfile = true
 				}
 				break
 			}
 		}
-		ruleID := getDsRuleID(rule.Rule.ID)
+		ruleID := getDsRuleID(cfg.RequirementID)
 		if !ruleAlreadyInDsProfile && !rulesMap[ruleID] {
 			rulesMap[ruleID] = true
 			tailoringSelections = append(tailoringSelections, xccdf.SelectElement{
@@ -122,71 +121,77 @@ func selectAdditionalRules(tailoringSelections, dsProfileSelections []xccdf.Sele
 	return tailoringSelections
 }
 
-func getTailoringSelections(oscalPolicy policy.Policy, dsProfile *xccdf.ProfileElement, dsPath string) ([]xccdf.SelectElement, error) {
+func filterValidRules(configuration []plugin.AssessmentConfiguration, dsPath string) ([]plugin.AssessmentConfiguration, []string, error) {
 	dsRules, err := GetDsRules(dsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get rules from datastream: %w", err)
+		return nil, nil, fmt.Errorf("failed to get rules from datastream: %w", err)
 	}
 
-	// All OSCAL Policy rules should be present in the Datastream
-	var invalidRules []string
-	for _, rule := range oscalPolicy {
-		if !validateRuleExistence(rule.Rule.ID, dsRules) {
-			invalidRules = append(invalidRules, rule.Rule.ID)
+	var validConfigs []plugin.AssessmentConfiguration
+	var skippedRules []string
+	for _, cfg := range configuration {
+		if validateRuleExistence(cfg.RequirementID, dsRules) {
+			validConfigs = append(validConfigs, cfg)
+		} else {
+			skippedRules = append(skippedRules, cfg.RequirementID)
 		}
 	}
-	if len(invalidRules) > 0 {
-		return nil, fmt.Errorf("one or more rules were not found in datastream %s: %s", dsPath, invalidRules)
+
+	if len(skippedRules) > 0 {
+		hclog.Default().Warn(
+			fmt.Sprintf("%d rule(s) not found in datastream %s and will be skipped: %s",
+				len(skippedRules), dsPath, skippedRules))
 	}
 
-	var tailoringSelections []xccdf.SelectElement
-	// Rules in dsProfile but not in OSCAL Policy must be unselected in Tailoring file.
-	tailoringSelections = unselectAbsentRules(tailoringSelections, dsProfile.Selections, oscalPolicy)
-	tailoringSelections = selectAdditionalRules(tailoringSelections, dsProfile.Selections, oscalPolicy)
-
-	return tailoringSelections, nil
+	return validConfigs, skippedRules, nil
 }
 
-func updateTailoringValues(tailoringValues, dsProfileValues []xccdf.SetValueElement, oscalPolicy policy.Policy) []xccdf.SetValueElement {
+func getTailoringSelections(configuration []plugin.AssessmentConfiguration, dsProfile *xccdf.ProfileElement) []xccdf.SelectElement {
+	var tailoringSelections []xccdf.SelectElement
+	tailoringSelections = unselectAbsentRules(tailoringSelections, dsProfile.Selections, configuration)
+	tailoringSelections = selectAdditionalRules(tailoringSelections, dsProfile.Selections, configuration)
+
+	return tailoringSelections
+}
+
+func updateTailoringValues(tailoringValues, dsProfileValues []xccdf.SetValueElement, configuration []plugin.AssessmentConfiguration) []xccdf.SetValueElement {
 	varsMap := make(map[string]bool)
 
-	for _, rule := range oscalPolicy {
-		for _, prm := range rule.Rule.Parameters {
+	for _, cfg := range configuration {
+		for prmID, prmValue := range cfg.Parameters {
 			varAlreadyInDsProfile := false
 			for _, dsVar := range dsProfileValues {
 				dsVarID := removePrefix(dsVar.IDRef, varIDPrefix)
-				if prm.ID == dsVarID {
-					if prm.Value == dsVar.Value {
+				if prmID == dsVarID {
+					if prmValue == dsVar.Value {
 						varAlreadyInDsProfile = true
 					}
 					break
 				}
 			}
-			varID := getDsVarID(prm.ID)
+			varID := getDsVarID(prmID)
 			if !varAlreadyInDsProfile && !varsMap[varID] {
 				varsMap[varID] = true
 				tailoringValues = append(tailoringValues, xccdf.SetValueElement{
 					IDRef: varID,
-					Value: prm.Value,
+					Value: prmValue,
 				})
 			}
 		}
-
 	}
 	return tailoringValues
 }
 
-func getTailoringValues(oscalPolicy policy.Policy, dsProfile *xccdf.ProfileElement, dsPath string) ([]xccdf.SetValueElement, error) {
+func getTailoringValues(configuration []plugin.AssessmentConfiguration, dsProfile *xccdf.ProfileElement, dsPath string) ([]xccdf.SetValueElement, error) {
 	dsVariables, err := GetDsVariablesValues(dsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get variables from datastream: %w", err)
 	}
 
-	// All OSCAL policy variables should be present in the Datastream
-	for _, rule := range oscalPolicy {
-		for _, prm := range rule.Rule.Parameters {
-			if !validateVariableExistence(prm.ID, dsVariables) {
-				return nil, fmt.Errorf("variable %s not found in datastream: %s", prm.ID, dsPath)
+	for _, cfg := range configuration {
+		for prmID := range cfg.Parameters {
+			if !validateVariableExistence(prmID, dsVariables) {
+				return nil, fmt.Errorf("variable %s not found in datastream: %s", prmID, dsPath)
 			}
 		}
 	}
@@ -197,18 +202,27 @@ func getTailoringValues(oscalPolicy policy.Policy, dsProfile *xccdf.ProfileEleme
 	}
 
 	var tailoringValues []xccdf.SetValueElement
-	tailoringValues = updateTailoringValues(tailoringValues, dsProfile.Values, oscalPolicy)
+	tailoringValues = updateTailoringValues(tailoringValues, dsProfile.Values, configuration)
 
 	return tailoringValues, nil
 }
 
-func getTailoringProfile(profileId string, dsPath string, oscalPolicy policy.Policy) (*xccdf.ProfileElement, error) {
+func getTailoringProfile(profileId string, dsPath string, configuration []plugin.AssessmentConfiguration) (*xccdf.ProfileElement, error) {
 	tailoringProfile := new(xccdf.ProfileElement)
 	tailoringProfile.ID = getTailoringProfileID(profileId)
 
 	dsProfile, err := GetDsProfile(profileId, dsPath)
 	if err != nil {
 		return tailoringProfile, fmt.Errorf("failed to get base profile from datastream: %w", err)
+	}
+
+	validConfiguration, _, err := filterValidRules(configuration, dsPath)
+	if err != nil {
+		return tailoringProfile, fmt.Errorf("failed to filter rules against datastream: %w", err)
+	}
+
+	if len(validConfiguration) == 0 {
+		return tailoringProfile, fmt.Errorf("no valid rules found in datastream %s for the provided configuration", dsPath)
 	}
 
 	tailoringProfile.Extends = getTailoringExtendedProfileID(profileId)
@@ -218,27 +232,22 @@ func getTailoringProfile(profileId string, dsPath string, oscalPolicy policy.Pol
 		Value:    getTailoringProfileTitle(dsProfile.Title.Value),
 	}
 
-	tailoringProfile.Selections, err = getTailoringSelections(oscalPolicy, dsProfile, dsPath)
-	if err != nil {
-		return tailoringProfile, fmt.Errorf("failed to get selections for tailoring profile: %w", err)
-	}
+	tailoringProfile.Selections = getTailoringSelections(validConfiguration, dsProfile)
 
-	tailoringProfile.Values, err = getTailoringValues(oscalPolicy, dsProfile, dsPath)
+	tailoringProfile.Values, err = getTailoringValues(validConfiguration, dsProfile, dsPath)
 	if err != nil {
 		return tailoringProfile, fmt.Errorf("failed to get values for tailoring profile: %w", err)
 	}
 	return tailoringProfile, nil
 }
 
-func PolicyToXML(oscalPolicy policy.Policy, config *config.Config) (string, error) {
-	datastreamPath := config.Files.Datastream
-	profileId := config.Parameters.Profile
+func PolicyToXML(configuration []plugin.AssessmentConfiguration, datastreamPath, profileId string) (string, error) {
 
-	if oscalPolicy == nil {
-		return "", fmt.Errorf("OSCAL policy is empty")
+	if len(configuration) == 0 {
+		return "", fmt.Errorf("assessment configuration is empty")
 	}
 
-	tailoringProfile, err := getTailoringProfile(profileId, datastreamPath, oscalPolicy)
+	tailoringProfile, err := getTailoringProfile(profileId, datastreamPath, configuration)
 	if err != nil {
 		return "", err
 	}

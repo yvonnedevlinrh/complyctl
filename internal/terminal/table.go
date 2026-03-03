@@ -5,74 +5,41 @@ package terminal
 import (
 	"fmt"
 	"io"
-	"strings"
+	"os"
 
-	"github.com/charmbracelet/bubbles/table"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 )
 
-var (
-	baseStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240"))
-	_ tea.Model = (*Model)(nil)
-)
-
-type Model struct {
-	Table table.Model
-	// displayed above table
-	HeaderMsg string
-	//displayed below table
-	HelpMsg string
-}
-
-func (m Model) Init() tea.Cmd { return nil }
-
-func (m Model) Update(_ tea.Msg) (tea.Model, tea.Cmd) {
-	return m, tea.Quit
-}
-
-func (m Model) View() string {
-
-	output := baseStyle.Render(m.Table.View()) + "\n"
-
-	if len(m.HeaderMsg) > 0 {
-		output = m.HeaderMsg + "\n" + output
-	}
-
-	if len(m.HelpMsg) > 0 {
-		output = output + m.HelpMsg + "\n"
-	}
-	return output
-}
-
-func WrapText(text string, lineWidth int) string {
-	words := strings.Fields(text)
-	var wrapped strings.Builder
-	currentLineLength := 0
-
-	for _, word := range words {
-		if currentLineLength+len(word) > lineWidth {
-			wrapped.WriteString("\n")
-			currentLineLength = 0
-		}
-		wrapped.WriteString(word + " ")
-		currentLineLength += len(word) + 1
-	}
-	return strings.TrimSpace(wrapped.String())
+// IsTTY returns true when stdout is an interactive terminal.
+func IsTTY() bool {
+	return term.IsTerminal(os.Stdout.Fd())
 }
 
 // ShowPlainTable renders a plain text formatted table to writer.
-func ShowPlainTable(writer io.Writer, columns []table.Column, rows []table.Row) {
-	for _, col := range columns {
-		_, _ = fmt.Fprintf(writer, "%-*s", col.Width, col.Title)
+func ShowPlainTable(w io.Writer, headers []string, rows [][]string) {
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = len(h) + 2
 	}
-	_, _ = fmt.Fprintln(writer)
 	for _, row := range rows {
 		for i, cell := range row {
-			_, _ = fmt.Fprintf(writer, "%-*s", columns[i].Width, cell)
+			if i < len(widths) {
+				if cw := len(cell) + 2; cw > widths[i] {
+					widths[i] = cw
+				}
+			}
 		}
-		_, _ = fmt.Fprintln(writer)
+	}
+	for i, h := range headers {
+		_, _ = fmt.Fprintf(w, "%-*s", widths[i], h)
+	}
+	_, _ = fmt.Fprintln(w)
+	for _, row := range rows {
+		for i, cell := range row {
+			if i < len(widths) {
+				_, _ = fmt.Fprintf(w, "%-*s", widths[i], cell)
+			}
+		}
+		_, _ = fmt.Fprintln(w)
 	}
 }

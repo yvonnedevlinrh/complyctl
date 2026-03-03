@@ -1,62 +1,62 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'The tag to release (e.g., v1.2.3)'
-        required: true
-        type: string
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'The tag to release (e.g., v1.2.3)'
+                required: true
+                type: string
 
 
 permissions:
-  contents: none
-  id-token: none
+    contents: none
+    id-token: none
 
 jobs:
-  release:
-    name: Release
-    runs-on: ubuntu-latest
+    release:
+        name: Release
+        runs-on: ubuntu-latest
 
-    permissions:
-      contents: write # for github releases
-      id-token: write # for keyless signing
+        permissions:
+            contents: write # for github releases
+            id-token: write # for keyless signing
 
-    steps:
-      - name: Validate Tag
-        run: |
-          if [[ "${GITHUB_REF:0:10}" != refs/tags/ ]]; then
-            echo 'Full Release workflow must be run with a tag, not a branch.'
-            exit 1
-          fi
-          tag="${GITHUB_REF:10}"
-          if ! grep -E '^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' <<<"$tag"; then
-            echo 'Invalid tag format. Must be semver with only major, minor, and patch, e.g. v1.2.3'
-            exit 1
-          fi
+        steps:
+            - name: Validate Tag
+              run: |
+                  if [[ "${GITHUB_REF:0:10}" != refs/tags/ ]]; then
+                      echo 'Full Release workflow must be run with a tag, not a branch.'
+                      exit 1
+                  fi
+                  tag="${GITHUB_REF:10}"
+                  if ! grep -E '^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' <<<"$tag"; then
+                      echo 'Invalid tag format. Must be semver with only major, minor, and patch, e.g. v1.2.3'
+                      exit 1
+                  fi
 
-      - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
+            - name: Checkout Code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version-file: 'go.mod'
+            - name: Setup Go
+              uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+              with:
+                  go-version-file: 'go.mod'
 
-      - name: Install cosign for signatures
-        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+            - name: Install cosign for signatures
+              uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
 
-      - name: Install syft for sboms
-        uses: anchore/sbom-action/download-syft@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
+            - name: Install syft for sboms
+              uses: anchore/sbom-action/download-syft@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
-        with:
-          version: '~> v2'
-          args: --verbose release --clean
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          GORELEASER_CURRENT_TAG: "${{ inputs.tag }}"
-        continue-on-error: false
+            - name: Run GoReleaser
+              uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
+              with:
+                  version: '~> v2'
+                  args: --verbose release --clean
+              env:
+                  GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+                  GORELEASER_CURRENT_TAG: "${{ inputs.tag }}"
+              continue-on-error: false

@@ -1,73 +1,99 @@
 # Quick Start
 
-To get started with the `complyctl` CLI, at least one plugin must be installed with a corresponding OSCAL [Component Definition](https://pages.nist.gov/OSCAL/learn/concepts/layer/implementation/component-definition/).
+## Step 1: Install complyctl
 
-> Note: Some of these steps are manual. The [quick_start.sh](../scripts/quick_start/quick_start.sh) automates the process below.
+See [INSTALLATION.md](INSTALLATION.md).
 
-## Step 1: Install Complyctl
+## Step 2: Install a plugin
 
-See [INSTALLATION.md](INSTALLATION.md)
-
-## Step 2: Add configuration
-
-After running `complyctl list` for the first time, the complytime
-directory should be created under $HOME/.local/share
-
-```markdown
-complytime
-├── bundles
-└── plugins
-└── controls
-```
-
-You will need an OSCAL Component Definition that defines an OSCAL Component for your target system and an OSCAL Component the corresponding
-policy validation plugin. See `docs/samples/` for example configuration for the `myplugin` plugin.
+Scanning providers are standalone executables placed in `~/.complytime/providers/`. The filename determines the evaluator ID.
 
 ```bash
-cp docs/samples/sample-component-definition.json ~/.local/share/complytime/bundles
-cp docs/samples/sample-profile.json docs/samples/sample-catalog.json ~/.local/share/complytime/controls
+mkdir -p ~/.complytime/providers
+cp bin/complyctl-provider-openscap ~/.complytime/providers/
 ```
 
-## Step 3: Install a plugin
+Naming convention: `complyctl-provider-<evaluator-id>`. The CLI strips the prefix to derive the evaluator ID used for routing.
 
-Each plugin requires a plugin manifest. For more information about plugin discovery see [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md).
+For the openscap plugin, install prerequisites:
+- `openscap-scanner` package
+- `scap-security-guide` package
+
+See the [Plugin Guide](PLUGIN_GUIDE.md) for authoring details.
+
+## Step 3: Create workspace config
+
+Create `complytime.yaml` in your working directory. This is the runtime configuration — it declares targets, variables, and policy selections.
+
+```yaml
+version: 1
+policies:
+  - url: registry.example.com/policies/nist-800-53-r5@v1.0
+    id: nist
+targets:
+  - id: my-system
+    policies:
+      - nist
+    variables:
+      api_token: ${MY_API_TOKEN}
+```
+
+Or use interactive setup:
 
 ```bash
-plugin_dir="$HOME/.local/share/complytime/plugins"
-cp "bin/openscap-plugin" "docs/samples/c2p-openscap-manifest.json" "$plugin_dir"
-checksum=$(sha256sum ~/.local/share/complytime/plugins/openscap-plugin | awk '{ print $1 }' )
-version=$(bin/complyctl version | head -n1 | awk '{ print $2 }' | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-sed -i -e "s|checksum_placeholder|$checksum|" -e "s|version_placeholder|$version|" "$plugin_dir/c2p-openscap-manifest.json"
+complyctl init
 ```
 
-## Step 4: Edit plugin configuration (optional)
+`init` prompts for policy URLs, IDs, and targets when no `complytime.yaml` exists.
+
+**Variable expansion**: Only `targets[].variables` supports `${VAR}` environment variable substitution. Use this for secrets and per-target credentials. Top-level `variables` are workspace constants passed to providers as-is — `${...}` references there are **not** expanded.
+
+## Step 4: Fetch policies
+
 ```bash
-mkdir -p /etc/complyctl/config.d
-cp ~/.local/share/complytime/plugins/c2p-openscap-manifest.json /etc/complyctl/config.d
+complyctl get
 ```
 
-Edit `/etc/complyctl/config.d/c2p-openscap-manifest.json` to keep only the desired changes. e.g.:
-```json
-{
-  "configuration": [
-    {
-      "name": "policy",
-      "default": "custom_tailoring_policy.xml",
-    },
-    {
-      "name": "arf",
-      "default": "custom_arf.xml",
-    },
-    {
-      "name": "results",
-      "default": "custom_results.xml",
-    }
-  ]
-}
+Downloads Gemara policies from the OCI registry into the local cache (`~/.complytime/policies/`). Incremental — only fetches new or modified content.
+
+## Step 5: Verify cache
+
+```bash
+complyctl list
 ```
 
-### Using with the openscap-plugin
+Displays cached policies and their versions.
 
-If using the openscap-plugin, there are two prerequisites:
-- **openscap-scanner** package installed
-- **scap-security-guide** package installed
+## Step 6: Generate
+
+```bash
+complyctl generate --policy-id nist-800-53-r5
+```
+
+Resolves the policy dependency graph, extracts assessment configurations, and dispatches to the matching plugin via Generate RPC.
+
+## Step 7: Scan
+
+```bash
+# EvaluationLog (default)
+complyctl scan --policy-id nist-800-53-r5
+
+# Markdown report
+complyctl scan --policy-id nist-800-53-r5 --format pretty
+
+# OSCAL assessment-results
+complyctl scan --policy-id nist-800-53-r5 --format oscal
+
+# SARIF
+complyctl scan --policy-id nist-800-53-r5 --format sarif
+```
+
+Output written to `./.complytime/scan/`.
+
+## Authentication
+
+complyctl uses Docker credential helpers via `oras-credentials-go`. No custom configuration needed — if `docker login` works, `complyctl get` works.
+
+Supported sources:
+- `~/.docker/config.json` (credHelpers, credsStore, inline auths)
+- Credential helpers: `docker-credential-desktop`, `docker-credential-gcloud`, `docker-credential-ecr-login`, etc.

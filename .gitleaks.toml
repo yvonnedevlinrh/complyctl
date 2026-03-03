@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''tests/e2e/QUICKSTART\.md''',
+  '''specs/.+/quickstart\.md''',
+  '''scripts/setup-github-workflows\.py''',
+]

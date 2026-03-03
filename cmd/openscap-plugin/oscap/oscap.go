@@ -3,25 +3,39 @@
 package oscap
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/complytime/complyctl/cmd/openscap-plugin/config"
 	"github.com/hashicorp/go-hclog"
 )
 
-func executeCommand(command []string) ([]byte, error) {
+// shellJoin formats a command slice as a copy-pasteable shell string.
+func shellJoin(command []string) string {
+	return strings.Join(command, " ")
+}
+
+func executeCommand(ctx context.Context, command []string) ([]byte, error) {
 	cmdPath, err := exec.LookPath(command[0])
 	if err != nil {
 		return nil, fmt.Errorf("command not found: %s: %w", command[0], err)
 	}
 
-	hclog.Default().Debug("Executing command", "command", command)
-	cmd := exec.Command(cmdPath, command[1:]...)
+	cmdStr := shellJoin(command)
+	hclog.Default().Info("Executing command", "command", cmdStr)
+	cmd := exec.CommandContext(ctx, cmdPath, command[1:]...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return output, fmt.Errorf(
+				"command timed out after deadline: %w\n\nTo debug, run manually:\n  %s",
+				ctx.Err(), cmdStr,
+			)
+		}
 		if err.Error() == "exit status 1" {
 			return output, fmt.Errorf("oscap error during evaluation: %w", err)
 		} else if err.Error() == "exit status 2" {
@@ -54,10 +68,10 @@ func constructScanCommand(openscapFiles map[string]string, profile string) []str
 	return cmd
 }
 
-func OscapScan(openscapFiles map[string]string, profile string) ([]byte, error) {
+func OscapScan(ctx context.Context, openscapFiles map[string]string, profile string) ([]byte, error) {
 	command := constructScanCommand(openscapFiles, profile)
 
-	return executeCommand(command)
+	return executeCommand(ctx, command)
 }
 
 func constructGenerateFixCommand(fixType, output, profile, tailoringFile, datastream string) []string {
@@ -76,7 +90,7 @@ func constructGenerateFixCommand(fixType, output, profile, tailoringFile, datast
 	return cmd
 }
 
-func OscapGenerateFix(pluginDir, profile, policyFile, datastream string) error {
+func OscapGenerateFix(ctx context.Context, pluginDir, profile, policyFile, datastream string) error {
 	fixTypes := map[string]string{
 		"bash":      "remediation-script.sh",
 		"ansible":   "remediation-playbook.yml",
@@ -87,7 +101,7 @@ func OscapGenerateFix(pluginDir, profile, policyFile, datastream string) error {
 		outputPath := filepath.Join(pluginDir, config.RemediationDir, outputFile)
 		hclog.Default().Debug("Generating remedation file %s", outputPath)
 		command := constructGenerateFixCommand(fixType, outputPath, profile, policyFile, datastream)
-		_, err := executeCommand(command)
+		_, err := executeCommand(ctx, command)
 		if err != nil {
 			return err
 		}

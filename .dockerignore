@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.test
+*.out
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+*_test.go
+testdata/
+tests/
+coverage.out
+
+# Config files
+*.yaml
+*.yml
+!go.mod
+!go.sum
+.env*
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Project specific
+.specify/
+.cursor/
+user_workspace
+assessment-plan.json
+assessment-results.*
+go.work*

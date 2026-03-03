@@ -1,134 +1,25 @@
 name: integration-test
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-
-env:
-  COMPLYTIME_DEV_MODE: 1
-  PRODUCT: fedora
-  CATALOG: cusp_fedora
-  PROFILE: fedora-cusp_fedora-default
+    push:
+        branches:
+            - main
+    pull_request:
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  integration-test-fedora:
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
-    strategy:
-      matrix:
-        assessment-plan-status: ["original", "customized"]
-    steps:
-      # Checkout the code from the repository
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    integration-test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Setup complyctl for further testing
-      - name: Setup compyctl
-        uses: ./.github/actions/setup-complyctl
-        # This is the test data for a specific product, and it may be updated in the future if necessary.
-        with:
-          product: "$PRODUCT"
-          catalog: "$CATALOG"
-          profile: "$PROFILE"
+            - name: Set up Go
+              uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+              with:
+                  go-version-file: './go.mod'
 
-      - name: Test complyctl list
-        run: |
-          LIST_OUTPUT="$(complyctl list --plain)"
-          echo "$LIST_OUTPUT"
-          echo "$LIST_OUTPUT" | grep -q "$CATALOG"
-
-      # Test with original assessment-plan
-
-      - name: Test complyctl plan
-        if: ${{ matrix.assessment-plan-status == 'original'}}
-        run: complyctl plan "$CATALOG"
-
-      # Test with customized assessment-plan
-
-      - name: Test complyctl plan dry run
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
-        run: complyctl plan "$CATALOG" --dry-run --out config_plan.yml
-
-      # Customize a plan config file, only include one control with one rule
-      - name: Customize plan config
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
-        run: |
-          cat << EOF > config.yml
-          frameworkId: cusp_fedora
-          includeControls:
-            - controlId: cusp_fedora_3-6
-              controlTitle: Files, Permissions, and Ownership
-              includeRules:
-                - file_permissions_etc_passwd
-          EOF
-
-      - name: Test complyctl plan with customized config
-        if: ${{ matrix.assessment-plan-status == 'customized'}}
-        run: complyctl plan "$CATALOG" --scope-config config.yml
-
-      # Validate OSCAL assessment-plan using go-oscal
-      - name: Validate assessment-plan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # download go-oscal executable
-          gh release download --pattern "go-oscal_*_Linux_amd64" -R defenseunicorns/go-oscal
-          GO_OSCAL_EXECUTABLE="$(ls go-oscal*)"
-          chmod +x "$GO_OSCAL_EXECUTABLE"
-          # validation
-          "./$GO_OSCAL_EXECUTABLE" validate -f complytime/assessment-plan.json
-
-      - name: Test complyctl generate
-        run: complyctl generate
-
-      # Set incorrect permissions on /etc/passwd to make the scan fail
-      - name: Set incorrect passwd permissions
-        run: |
-          echo "Current /etc/passwd permissions:"
-          ls -l /etc/passwd
-          chmod 666 /etc/passwd
-          echo "After setting to 666 (world-writable):"
-          ls -l /etc/passwd
-
-      - name: Test complyctl scan
-        run: complyctl scan --with-md
-
-      # Check file_permissions_etc_passwd scan result, it should be fail
-      - name: Check assessment-result
-        run: |
-          echo "Checking file_permissions_etc_passwd rule result..."
-
-          RESULT=$(jq -r '.["assessment-results"].results[].observations[] |
-          select(.title == "xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd").subjects[].props[] |
-          select(.name=="result").value' complytime/assessment-results.json)
-
-          echo "Result: $RESULT"
-          [ "$RESULT" = "fail" ] || exit 1
-
-      # Fix passwd permissions to make the scan pass
-      - name: Fix passwd permissions
-        run: |
-          chmod 644 /etc/passwd
-          echo "Set /etc/passwd permissions to 644:"
-          ls -l /etc/passwd
-
-      - name: Scan again
-        run: complyctl scan --with-md
-
-      # Check file_permissions_etc_passwd scan result, it should be pass
-      - name: Check assessment-result after fixing permissions
-        run: |
-          echo "Checking file_permissions_etc_passwd rule result after fix..."
-
-          RESULT=$(jq -r '.["assessment-results"].results[].observations[] |
-          select(.title == "xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd").subjects[].props[] |
-          select(.name=="result").value' complytime/assessment-results.json)
-
-          echo "Result: $RESULT"
-          [ "$RESULT" = "pass" ] || exit 1
+            - name: Run integration tests
+              run: make test-integration

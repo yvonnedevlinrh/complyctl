@@ -1,0 +1,187 @@
+title: ComplyTime Gemara-Native Threat Catalog
+metadata:
+    id: CT.COMPLYCTL
+    description: >
+        Threat catalog for the complytime CLI redesign covering the Gemara-native
+        workflow: OCI registry interaction, hashicorp/go-plugin subprocess execution,
+        gRPC plugin communication, workspace configuration, policy caching, and
+        assessment report generation.
+    version: 0.1.0
+    author:
+        id: jpower432
+        name: Jenn Power
+        type: Software-Assisted
+    mapping-references:
+        - id: CCC
+          title: Common Cloud Controls Core
+          version: v2025.10
+          url: https://github.com/finos/common-cloud-controls/releases
+          description: >
+              Foundational repository of reusable security controls, capabilities,
+              and threat models maintained by FINOS.
+
+imported-capabilities:
+    - reference-id: CCC
+      entries:
+          - reference-id: CCC.Core.CP29
+            remarks: Active Ingestion
+          - reference-id: CCC.Core.CP18
+            remarks: Resource Versioning
+
+imported-threats:
+    - reference-id: CCC
+      entries:
+          - reference-id: CCC.Core.TH14
+
+capabilities:
+    - id: CT.COMPLYCTL.CAP01
+      title: OCI Artifact Retrieval
+      description: >
+          Fetch policy artifacts (catalogs, guidance, policy layers) from OCI-compliant
+          registries using oras-go. Supports credential-based authentication via the
+          Docker credential chain and plain HTTP fallback.
+
+    - id: CT.COMPLYCTL.CAP02
+      title: Plugin Subprocess Execution
+      description: >
+          Discover plugin binaries matching the naming convention
+          (complyctl-provider-*) in a configured directory, launch them as
+          subprocesses via hashicorp/go-plugin, and manage their lifecycle.
+
+    - id: CT.COMPLYCTL.CAP03
+      title: gRPC Plugin Communication
+      description: >
+          Exchange assessment configurations, scan requests, and evaluation results
+          between the host CLI and plugin subprocesses over gRPC channels with
+          AutoMTLS enabled by hashicorp/go-plugin.
+
+    - id: CT.COMPLYCTL.CAP04
+      title: Workspace Configuration Loading
+      description: >
+          Parse the complytime.yaml workspace configuration file including
+          environment variable expansion (${VAR} syntax) for target variables
+          containing credentials and connection strings.
+
+    - id: CT.COMPLYCTL.CAP05
+      title: Policy Graph Resolution
+      description: >
+          Resolve cached OCI layers into a policy graph structure, extract
+          assessment configurations, and group them by evaluator ID for
+          plugin routing.
+
+    - id: CT.COMPLYCTL.CAP06
+      title: Target Variable Injection
+      description: >
+          Pass target-specific variables (authentication tokens, connection
+          strings, environment identifiers) from workspace configuration
+          through the plugin gRPC interface to assessment evaluators.
+
+    - id: CT.COMPLYCTL.CAP07
+      title: Assessment Report Generation
+      description: >
+          Write evaluation results to the local filesystem in multiple formats
+          under the specified output directory.
+
+threats:
+    - id: CT.COMPLYCTL.THR02
+      title: OCI Registry Artifact Tampering
+      description: >
+          Policy artifacts fetched by mutable tags (e.g., "latest") without content
+          digest pinning allow a compromised or man-in-the-middle registry to serve
+          malicious catalog, guidance, or policy layers. The cache sync stores whatever
+          the registry serves without verifying content against a known-good digest.
+      capabilities:
+          - reference-id: CCC
+            entries:
+                - reference-id: CCC.Core.CP29
+                - reference-id: CCC.Core.CP18
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP01
+
+    - id: CT.COMPLYCTL.THR03
+      title: Credential Exposure via Target Variable Transmission
+      description: >
+          Target variables carrying authentication tokens and connection strings
+          are resolved from environment variables at config load time, serialized
+          into gRPC messages, and transmitted to plugin subprocesses. This crosses
+          a process boundary — every plugin receiving a routed request gains access
+          to the target variables included in that request. Unresolved ${VAR}
+          references that fail silently could mask missing credentials, and
+          plaintext persistence in complytime.yaml widens the exposure surface.
+      capabilities:
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP04
+                - reference-id: CT.COMPLYCTL.CAP06
+                - reference-id: CT.COMPLYCTL.CAP03
+
+    - id: CT.COMPLYCTL.THR06
+      title: Insecure Registry Transport Downgrade
+      description: >
+          The registry client automatically enables plainHTTP when the configured
+          registry URL uses an http:// scheme, with no warning to the user. This
+          exposes OCI manifest and blob traffic (including authentication credentials
+          if configured) to network-level interception and modification.
+      capabilities:
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP01
+
+    - id: CT.COMPLYCTL.THR04
+      title: Plugin Binary Substitution
+      description: >
+          An attacker with write access to the plugin directory can replace a
+          legitimate complyctl-provider-* binary with a malicious executable. The
+          current discovery mechanism matches only on filename prefix and executable
+          permission — it does not verify binary integrity via digest, signature, or
+          code-signing. A substituted binary inherits the host process's trust
+          context including gRPC AutoMTLS and target variables.
+      capabilities:
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP02
+
+    - id: CT.COMPLYCTL.THR05
+      title: Plugin Subprocess Privilege Escalation
+      description: >
+          Plugin subprocesses launched by hashicorp/go-plugin execute with the same
+          OS-level privileges as the parent complyctl process. A compromised or
+          malicious plugin can access all files, environment variables, and network
+          resources available to the invoking user. No sandboxing, namespace
+          isolation, or capability restrictions are applied to plugin processes.
+      capabilities:
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP02
+                - reference-id: CT.COMPLYCTL.CAP03
+
+    - id: CT.COMPLYCTL.THR07
+      title: Unverified Plugin Assessment Results
+      description: >
+          The host CLI accepts plugin-reported assessment results (pass/fail/skip/error)
+          at face value with no independent verification. If a plugin produces incorrect
+          results due to bugs, misconfiguration, or version skew, the evaluation log
+          and downstream compliance reports will reflect those inaccuracies. Preserving
+          raw step-level results enables downstream consumers to audit provenance and
+          detect inconsistencies.
+      capabilities:
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP03
+                - reference-id: CT.COMPLYCTL.CAP07
+
+    - id: CT.COMPLYCTL.THR08
+      title: Log File Information Disclosure
+      description: >
+          The complyctl log file (complytime.log) captures structured log output
+          including plugin communication details, configuration values, and error
+          messages. If target variables containing credentials are logged at debug
+          or info level — or appear in error messages — the log file becomes a
+          secondary credential store readable by any process with access to the
+          working directory.
+      capabilities:
+          - reference-id: CT.COMPLYCTL
+            entries:
+                - reference-id: CT.COMPLYCTL.CAP04
+                - reference-id: CT.COMPLYCTL.CAP07

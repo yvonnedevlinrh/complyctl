@@ -3,7 +3,9 @@
 package oscap
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -50,8 +52,44 @@ func TestConstructScanCommand(t *testing.T) {
 	}
 }
 
-// In a more advanced stage we could add tests for the OscapScan function using a minimalistic
-// version of a OpenSCAP Datastream, but for now it's not implemented.
+func TestShellJoin(t *testing.T) {
+	cmd := []string{"oscap", "xccdf", "eval", "--profile", "cis_l1", "datastream.xml"}
+	got := shellJoin(cmd)
+	expected := "oscap xccdf eval --profile cis_l1 datastream.xml"
+	if got != expected {
+		t.Errorf("shellJoin() = %q, expected %q", got, expected)
+	}
+}
+
+func TestExecuteCommand_TimeoutIncludesCommand(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := executeCommand(ctx, []string{"sleep", "10"})
+	if err == nil {
+		t.Fatal("expected error for cancelled context")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "timed out") && !strings.Contains(errMsg, "cancelled") {
+		t.Errorf("expected timeout/cancel message, got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "sleep 10") {
+		t.Errorf("expected error to contain the command string 'sleep 10', got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "To debug, run manually") {
+		t.Errorf("expected error to contain debug hint, got: %s", errMsg)
+	}
+}
+
+func TestExecuteCommand_NonTimeoutErrorOmitsCommand(t *testing.T) {
+	_, err := executeCommand(context.Background(), []string{"nonexistent-binary-12345"})
+	if err == nil {
+		t.Fatal("expected error for missing binary")
+	}
+	if strings.Contains(err.Error(), "To debug, run manually") {
+		t.Error("non-timeout errors should not include the debug hint")
+	}
+}
 
 func TestConstructGenerateFixCommand(t *testing.T) {
 	tests := []struct {

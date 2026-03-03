@@ -1,37 +1,28 @@
 name: "Setup complyctl environment"
-description: "Setup environment for complyctl running"
-
-inputs:
-  product:
-    description: "The chosen product"
-    required: true
-  catalog:
-    description: "OSCAL content catalog of the chosen product"
-    required: true
-  profile:
-    description: "OSCAL content profile of the chosen product"
-    required: true
+description: "Build complyctl, test plugin, and mock OCI registry for integration testing"
 
 runs:
-  using: composite
-  steps:
-    # Install dependency on fedora
-    - name: Install dependency
-      run: dnf install wget make scap-security-guide git jq gh -y
-      shell: bash
+    using: composite
+    steps:
+        - name: Install dependencies
+          run: dnf install -y make git jq curl
+          shell: bash
 
-    # Configure Git for safe directory
-    - name: Configure Git for safe directory
-      run: git config --global --add safe.directory /__w/complyctl/complyctl
-      shell: bash
+        - name: Configure Git for safe directory
+          run: git config --global --add safe.directory /__w/complyctl/complyctl
+          shell: bash
 
-    # Set up Go environment
-    - name: Set up Go
-      uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-      with:
-        go-version-file: './go.mod'
+        - name: Set up Go
+          uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+          with:
+              go-version-file: './go.mod'
 
-    # Build complyctl and setup complyctl
-    - name: Build complyctl and setup complyctl
-      run: sh tests/build_init_env.sh ${{ inputs.product }} ${{ inputs.catalog }} ${{ inputs.profile }}
-      shell: bash
+        - name: Build binaries
+          run: make build build-test-plugin
+          shell: bash
+
+        - name: Install test plugin
+          run: |
+              mkdir -p ~/.complytime/providers
+              cp bin/complytime-providers-test ~/.complytime/providers/
+          shell: bash

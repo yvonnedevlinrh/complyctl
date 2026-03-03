@@ -1,0 +1,155 @@
+title: ComplyTime CLI Security Policy
+metadata:
+    id: CT.COMPLYCTL.POL01
+    description: >
+        Security policy for the complytime CLI establishing control import
+        requirements, risk decisions, and assessment plans for the Gemara-native
+        workflow.
+    version: 0.1.0
+    author:
+        id: complytime-team
+        name: ComplyTime
+        type: Software-Assisted
+        uri: https://github.com/complytime/complytime
+    mapping-references:
+        - id: CT.COMPLYCTL.CTRL
+          title: ComplyTime Control Catalog
+          version: 0.1.0
+          url: https://github.com/complytime/complytime
+          description: Security controls for the complytime CLI Gemara-native workflow.
+        - id: CT.COMPLYCTL
+          title: ComplyTime Threat Catalog
+          version: 0.1.0
+          url: https://github.com/complytime/complytime
+          description: Threat catalog for the complytime CLI Gemara-native workflow.
+
+contacts:
+    responsible:
+        - name: ComplyTime Maintainers
+          social: https://github.com/orgs/complytime/teams/maintainers
+    accountable:
+        - name: ComplyTime Maintainers
+          social: https://github.com/orgs/complytime/teams/maintainers
+
+scope:
+    in:
+        technologies:
+            - complytime CLI
+            - hashicorp/go-plugin
+            - OCI registries
+            - gRPC
+
+imports:
+    catalogs:
+        - reference-id: CT.COMPLYCTL.CTRL
+
+# Risk Catalog does not exist yet so just mapping to threats directly.
+risks:
+    mitigated:
+        - reference-id: CT.COMPLYCTL
+          entries:
+              - reference-id: CT.COMPLYCTL.THR02
+              - reference-id: CT.COMPLYCTL.THR03
+              - reference-id: CT.COMPLYCTL.THR06
+              - reference-id: CT.COMPLYCTL.THR04
+              - reference-id: CT.COMPLYCTL.THR05
+              - reference-id: CT.COMPLYCTL.THR07
+              - reference-id: CT.COMPLYCTL.THR08
+
+adherence:
+    evaluation-methods:
+        - type: automated
+          description: >
+              Behavioral e2e tests produce a Gemara EvaluationLog and SARIF report
+              against the control catalog on every pull request.
+          executor:
+              id: complytime-behavioral
+              name: complytime-behavioral
+              type: Software
+              version: 0.1.0
+              uri: https://github.com/complytime/complytime
+    assessment-plans:
+        - id: CT.COMPLYCTL.POL01.AP01
+          requirement-id: CT.COMPLYCTL.CTRL01.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies cryptographic signature validation on fetched policy content.
+        - id: CT.COMPLYCTL.POL01.AP04
+          requirement-id: CT.COMPLYCTL.CTRL02.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies digest recording in state.json.
+        - id: CT.COMPLYCTL.POL01.AP05
+          requirement-id: CT.COMPLYCTL.CTRL02.AR02
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies OCI layout structure.
+        - id: CT.COMPLYCTL.POL01.AP06
+          requirement-id: CT.COMPLYCTL.CTRL03.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies failure on unset env var.
+        - id: CT.COMPLYCTL.POL01.AP07
+          requirement-id: CT.COMPLYCTL.CTRL03.AR02
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies env var resolution.
+        - id: CT.COMPLYCTL.POL01.AP08
+          requirement-id: CT.COMPLYCTL.CTRL04.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies targeted plugin routing.
+        - id: CT.COMPLYCTL.POL01.AP09
+          requirement-id: CT.COMPLYCTL.CTRL04.AR02
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies error on evaluator mismatch.
+        - id: CT.COMPLYCTL.POL01.AP10
+          requirement-id: CT.COMPLYCTL.CTRL05.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies http:// enables plainHTTP.
+        - id: CT.COMPLYCTL.POL01.AP13
+          requirement-id: CT.COMPLYCTL.CTRL05.AR02
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies https:// does not enable plainHTTP.
+        - id: CT.COMPLYCTL.POL01.AP11
+          requirement-id: CT.COMPLYCTL.CTRL06.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies EvaluationLog completeness.
+        - id: CT.COMPLYCTL.POL01.AP12
+          requirement-id: CT.COMPLYCTL.CTRL06.AR02
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies error assessments in evaluation log output.
+        - id: CT.COMPLYCTL.POL01.AP14
+          requirement-id: CT.COMPLYCTL.CTRL07.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies plugin binary integrity check. Expected to fail — not implemented.
+        - id: CT.COMPLYCTL.POL01.AP15
+          requirement-id: CT.COMPLYCTL.CTRL08.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies plugin subprocess isolation. Expected to fail — not implemented.
+        - id: CT.COMPLYCTL.POL01.AP16
+          requirement-id: CT.COMPLYCTL.CTRL09.AR01
+          frequency: per-pull-request
+          evaluation-methods:
+              - type: behavioral
+                description: Verifies log file does not contain plaintext credentials.

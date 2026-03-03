@@ -29,14 +29,30 @@ dist
 # Dependency directories (remove the comment below to include it)
 #vendor/
 
-# testing workspace created by openscap-plugin
+# testing complytime created by openscap-plugin
 user_workspace
+complytime.yaml
+complyctl.log
+.complytime
 
 # Outputs
 assessment-plan.json
 assessment-results.*
 !**/testdata/assessment-plan.json
 !**/testdata/assessment-results.*
+governance/reports/*
 
 # Go workspaces
 go.work*
+
+# Speckit
+.specify/extensions/.cache/
+.specify/extensions/.backup/
+.specify/extensions/*/local-config.yml
+.specify/scripts
+.specify/templates
+
+# Agent dirs
+.cursor
+
+megalinter-reports/

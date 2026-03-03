@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ComplianceAsCode/compliance-operator/pkg/xccdf"
 	"github.com/antchfx/xmlquery"
+
+	xccdf "github.com/complytime/complyctl/cmd/openscap-plugin/xccdftype"
 )
 
 var testDataDir = filepath.Join("..", "..", "..", "internal", "complytime", "testdata", "openscap")

@@ -9,8 +9,3 @@ The `tests` job requires `copr_build` job to be built before running tests,
 so the built packages are automatically installed in the testing environment.
 
 The [Testing Farm documentation](https://packit.dev/docs/configuration/upstream/tests) gives information on how to include or modify tests.
-
-## Test RPM provided OSCAL content 
-
-Currently, there is a [simple test](../plans/test-RPM-provide-content.fmf) to make sure the RPM package  
-provides OSCAL content that can be used out of the box.

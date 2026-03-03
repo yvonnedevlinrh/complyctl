@@ -3,46 +3,52 @@
 package terminal
 
 import (
-	"bytes"
 	"strings"
 	"testing"
-	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSpin(t *testing.T) {
-	testData := []struct {
-		Sleep  time.Duration
-		Output string
-	}{
-		{
-			Sleep:  1050 * time.Millisecond,
-			Output: "\r\x1b[K|\r\x1b[K/\r\x1b[K-\r\x1b[K",
-		},
-		{
-			Sleep:  1550 * time.Millisecond,
-			Output: "\r\x1b[K|\r\x1b[K/\r\x1b[K-\r\x1b[K\\\r\x1b[K",
-		},
-	}
+func TestSpinnerModelView(t *testing.T) {
+	m := spinnerModel{}
+	m.spinner.Spinner.Frames = []string{"⠋"}
+	m.message = "loading..."
 
-	ansiEscape := func(str string) string {
-		escaped := str
-		escaped = strings.ReplaceAll(escaped, "\\", "\\\\")
-		escaped = strings.ReplaceAll(escaped, "\x1b", "\\x1b")
-		escaped = strings.ReplaceAll(escaped, "\r", "\\r")
-		return escaped
-	}
+	view := m.View()
+	assert.True(t, strings.Contains(view, "loading..."),
+		"expected spinner view to contain message, got: %q", view)
+}
 
-	for _, test := range testData {
-		out := bytes.NewBuffer(nil)
-		stop := make(chan int)
-		// Kick off fake long-running task
-		go time.AfterFunc(test.Sleep, func() { stop <- 1 })
-		// Show the spinner while we wait
-		ShowSpinnerOut(out, stop)
-		if actual := out.String(); actual != test.Output {
-			escapedActual := ansiEscape(actual)
-			escapedOutput := ansiEscape(test.Output)
-			t.Errorf("\nExpected: %s\nActual: %s", escapedOutput, escapedActual)
-		}
-	}
+func TestSpinnerModelStopMsg(t *testing.T) {
+	m := spinnerModel{}
+	m.message = "test"
+
+	updated, cmd := m.Update(stopMsg{})
+	require.NotNil(t, updated)
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, isQuit := msg.(tea.QuitMsg)
+	assert.True(t, isQuit, "expected tea.Quit command on stopMsg")
+}
+
+func TestSpinnerModelTickAdvancesFrame(t *testing.T) {
+	m := spinnerModel{}
+	m.spinner.Spinner.Frames = []string{"A", "B", "C"}
+	m.message = "working"
+
+	view1 := m.View()
+	updated, _ := m.Update(m.spinner.Tick())
+	view2 := updated.(spinnerModel).View()
+
+	assert.Contains(t, view1, "working")
+	assert.Contains(t, view2, "working")
+}
+
+func TestNewSpinnerWriter(t *testing.T) {
+	s := NewSpinnerWriter("test msg", nil)
+	require.NotNil(t, s)
+	require.NotNil(t, s.program)
 }

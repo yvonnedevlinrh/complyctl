@@ -1,6 +1,6 @@
-summary: Make sure OSCAL content provided in the RPM is good to be used
+summary: Validate complyctl RPM binary is functional
 
 execute:
     script:
-      - complyctl list --plain
-      - complyctl info cusp_fedora --plain
+      - complyctl version
+      - complyctl --help

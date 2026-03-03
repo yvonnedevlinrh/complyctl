@@ -17,6 +17,43 @@ MAN_OPENSCAP_PLUGIN_OUTPUT = docs/man/complyctl-openscap-plugin.7
 MAN_OPENSCAP_CONF = docs/man/c2p-openscap-manifest.md
 MAN_OPENSCAP_CONF_OUTPUT = docs/man/c2p-openscap-manifest.5
 
+##@ Proto
+
+proto: ## generate protobuf code (requires buf)
+	@command -v buf >/dev/null 2>&1 && buf generate || \
+		echo "Install buf: https://buf.build/docs/installation"
+
+lint-proto: ## lint protobuf files with buf
+	@command -v buf >/dev/null 2>&1 && buf lint || \
+		echo "Install buf: https://buf.build/docs/installation"
+.PHONY: lint-proto
+
+##@ Mock Servers (for testing)
+
+mock-registry: ## start mock OCI registry on port 8765
+	go run ./cmd/mock-oci-registry
+
+mock-registry-background: ## start mock OCI registry in background
+	@go run ./cmd/mock-oci-registry & \
+	echo "Mock registry PID: $$!"; \
+	echo "Stop with: kill $$!"
+
+test-e2e: build build-test-plugin ## run full E2E tests (in-process mock registry + test plugin)
+	go test -tags=e2e -mod=vendor ./tests/e2e/... -v -count=1 -timeout 120s
+
+test-behavioral: build build-test-plugin build-behavioral-report ## run behavioral assessment and generate EvaluationLog + SARIF
+	$(GO_BUILD_BINDIR)/behavioral-report \
+		-binary $(GO_BUILD_BINDIR)/complyctl \
+		-test-plugin $(GO_BUILD_BINDIR)/complytime-provider-test \
+		-catalog governance/controls/complytime-controls.yaml \
+		-artifact-uri governance/controls/complytime-controls.yaml \
+		-out governance/reports
+.PHONY: test-behavioral
+
+test-integration: build build-test-plugin ## run integration test (mock registry + test plugin, shell-based)
+	./tests/integration_test.sh
+.PHONY: test-integration
+
 ##@ Compilation
 
 all: clean vendor test-unit build ## compile from scratch
@@ -24,7 +61,16 @@ all: clean vendor test-unit build ## compile from scratch
 
 build: prep-build-dir ## compile
 	go build -mod=vendor -o $(GO_BUILD_BINDIR)/ -ldflags="$(GO_LD_EXTRAFLAGS)" $(GO_BUILD_PACKAGES)
+	cd cmd/openscap-plugin && go build -mod=vendor -o ../../$(GO_BUILD_BINDIR)/openscap-plugin .
 .PHONY: build
+
+build-test-plugin: prep-build-dir ## build test plugin for E2E tests
+	go build -mod=vendor -o $(GO_BUILD_BINDIR)/complyctl-provider-test ./cmd/test-plugin
+.PHONY: build-test-plugin
+
+build-behavioral-report: prep-build-dir ## build behavioral report tool (go test -json -> EvaluationLog + SARIF)
+	go build -mod=vendor -o $(GO_BUILD_BINDIR)/behavioral-report ./cmd/behavioral-report
+.PHONY: build-behavioral-report
 
 ##@ Packaging
 
@@ -51,6 +97,7 @@ vendor: ## go mod sync
 	go mod tidy
 	go mod verify
 	go mod vendor
+	cd cmd/openscap-plugin && go mod tidy && go mod verify && go mod vendor
 .PHONY: vendor
 
 clean:
@@ -75,6 +122,11 @@ format:
 vet:
 	go vet ./...
 .PHONY: vet
+
+lint: ## run linters (golangci-lint + goimports check)
+	golangci-lint run ./...
+	@command -v goimports >/dev/null 2>&1 && goimports -l ./internal/ ./cmd/ || true
+.PHONY: lint
 
 ##@ Help
 

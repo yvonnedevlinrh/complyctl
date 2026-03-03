@@ -8,11 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ComplianceAsCode/compliance-operator/pkg/xccdf"
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
-	"github.com/oscal-compass/oscal-sdk-go/extensions"
-
-	"github.com/complytime/complyctl/cmd/openscap-plugin/config"
+	xccdf "github.com/complytime/complyctl/cmd/openscap-plugin/xccdftype"
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 // This is a supporting function to get the profile element from the testing Datastream.
@@ -190,7 +187,7 @@ func TestUnselectAbsentRules(t *testing.T) {
 		name                string
 		tailoringSelections []xccdf.SelectElement
 		dsProfileSelections []xccdf.SelectElement
-		oscalPolicy         policy.Policy
+		configuration       []plugin.AssessmentConfiguration
 		expectedSelections  []xccdf.SelectElement
 	}{
 		{
@@ -200,9 +197,9 @@ func TestUnselectAbsentRules(t *testing.T) {
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: true},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
-				{Rule: extensions.Rule{ID: "rule2"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
+				{RequirementID: "rule2"},
 			},
 			expectedSelections: []xccdf.SelectElement{},
 		},
@@ -213,8 +210,8 @@ func TestUnselectAbsentRules(t *testing.T) {
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: true},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
 			},
 			expectedSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: false},
@@ -227,7 +224,7 @@ func TestUnselectAbsentRules(t *testing.T) {
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: true},
 			},
-			oscalPolicy: policy.Policy{},
+			configuration: []plugin.AssessmentConfiguration{},
 			expectedSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: false},
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: false},
@@ -237,8 +234,8 @@ func TestUnselectAbsentRules(t *testing.T) {
 			name:                "No dsProfileSelections",
 			tailoringSelections: []xccdf.SelectElement{},
 			dsProfileSelections: []xccdf.SelectElement{},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
 			},
 			expectedSelections: []xccdf.SelectElement{},
 		},
@@ -246,7 +243,7 @@ func TestUnselectAbsentRules(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := unselectAbsentRules(tt.tailoringSelections, tt.dsProfileSelections, tt.oscalPolicy)
+			result := unselectAbsentRules(tt.tailoringSelections, tt.dsProfileSelections, tt.configuration)
 			if len(result) != len(tt.expectedSelections) {
 				t.Errorf("unselectAbsentRules() length = %v; want %v", len(result), len(tt.expectedSelections))
 			}
@@ -265,7 +262,7 @@ func TestSelectAdditionalRules(t *testing.T) {
 		name                string
 		tailoringSelections []xccdf.SelectElement
 		dsProfileSelections []xccdf.SelectElement
-		oscalPolicy         policy.Policy
+		configuration       []plugin.AssessmentConfiguration
 		expectedSelections  []xccdf.SelectElement
 	}{
 		{
@@ -275,9 +272,9 @@ func TestSelectAdditionalRules(t *testing.T) {
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: true},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
-				{Rule: extensions.Rule{ID: "rule2"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
+				{RequirementID: "rule2"},
 			},
 			expectedSelections: []xccdf.SelectElement{},
 		},
@@ -287,9 +284,9 @@ func TestSelectAdditionalRules(t *testing.T) {
 			dsProfileSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
-				{Rule: extensions.Rule{ID: "rule2"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
+				{RequirementID: "rule2"},
 			},
 			expectedSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: true},
@@ -299,9 +296,9 @@ func TestSelectAdditionalRules(t *testing.T) {
 			name:                "All additional rules",
 			tailoringSelections: []xccdf.SelectElement{},
 			dsProfileSelections: []xccdf.SelectElement{},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
-				{Rule: extensions.Rule{ID: "rule2"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
+				{RequirementID: "rule2"},
 			},
 			expectedSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
@@ -314,8 +311,8 @@ func TestSelectAdditionalRules(t *testing.T) {
 			dsProfileSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: false},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
 			},
 			expectedSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
@@ -327,10 +324,10 @@ func TestSelectAdditionalRules(t *testing.T) {
 			dsProfileSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule1", Selected: true},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "rule1"}},
-				{Rule: extensions.Rule{ID: "rule2"}},
-				{Rule: extensions.Rule{ID: "rule2"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "rule1"},
+				{RequirementID: "rule2"},
+				{RequirementID: "rule2"},
 			},
 			expectedSelections: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_rule2", Selected: true},
@@ -340,7 +337,7 @@ func TestSelectAdditionalRules(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := selectAdditionalRules(tt.tailoringSelections, tt.dsProfileSelections, tt.oscalPolicy)
+			result := selectAdditionalRules(tt.tailoringSelections, tt.dsProfileSelections, tt.configuration)
 			if len(result) != len(tt.expectedSelections) {
 				t.Errorf("selectAdditionalRules() length = %v; want %v", len(result), len(tt.expectedSelections))
 			}
@@ -353,43 +350,97 @@ func TestSelectAdditionalRules(t *testing.T) {
 	}
 }
 
+// TestFilterValidRules tests the filterValidRules function.
+func TestFilterValidRules(t *testing.T) {
+	dsPath := filepath.Join(testDataDir, "ssg-rhel-ds.xml")
+
+	tests := []struct {
+		name                 string
+		configuration        []plugin.AssessmentConfiguration
+		expectedError        bool
+		expectedValidCount   int
+		expectedSkippedCount int
+		expectedSkipped      []string
+	}{
+		{
+			name: "All rules present",
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "package_telnet-server_removed"},
+				{RequirementID: "package_telnet_removed"},
+			},
+			expectedValidCount:   2,
+			expectedSkippedCount: 0,
+		},
+		{
+			name: "One rule missing in datastream",
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "package_telnet-server_removed"},
+				{RequirementID: "this_rule_is_not_in_datastream"},
+			},
+			expectedValidCount:   1,
+			expectedSkippedCount: 1,
+			expectedSkipped:      []string{"this_rule_is_not_in_datastream"},
+		},
+		{
+			name: "All rules missing",
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "bogus_rule_a"},
+				{RequirementID: "bogus_rule_b"},
+			},
+			expectedValidCount:   0,
+			expectedSkippedCount: 2,
+		},
+		{
+			name:                 "Empty configuration",
+			configuration:        []plugin.AssessmentConfiguration{},
+			expectedValidCount:   0,
+			expectedSkippedCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			valid, skipped, err := filterValidRules(tt.configuration, dsPath)
+			if (err != nil) != tt.expectedError {
+				t.Errorf("filterValidRules() error = %v; want error=%v", err, tt.expectedError)
+			}
+			if len(valid) != tt.expectedValidCount {
+				t.Errorf("filterValidRules() valid count = %d; want %d", len(valid), tt.expectedValidCount)
+			}
+			if len(skipped) != tt.expectedSkippedCount {
+				t.Errorf("filterValidRules() skipped count = %d; want %d", len(skipped), tt.expectedSkippedCount)
+			}
+			for i, s := range tt.expectedSkipped {
+				if i < len(skipped) && skipped[i] != s {
+					t.Errorf("filterValidRules() skipped[%d] = %s; want %s", i, skipped[i], s)
+				}
+			}
+		})
+	}
+}
+
 // TestGetTailoringSelections tests the getTailoringSelections function.
 func TestGetTailoringSelections(t *testing.T) {
-	dsPath := filepath.Join(testDataDir, "ssg-rhel-ds.xml")
 	parsedProfile, _ := getProfileElementTest(t, "xccdf_org.ssgproject.content_profile_test_profile")
 
 	tests := []struct {
 		name           string
-		oscalPolicy    policy.Policy
-		expectedError  bool
+		configuration  []plugin.AssessmentConfiguration
 		expectedResult []xccdf.SelectElement
 	}{
 		{
 			name: "All rules present",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "package_telnet-server_removed"}},
-				{Rule: extensions.Rule{ID: "package_telnet_removed"}},
-				{Rule: extensions.Rule{ID: "set_password_hashing_algorithm_logindefs"}},
-				{Rule: extensions.Rule{ID: "set_password_hashing_algorithm_systemauth"}},
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "package_telnet-server_removed"},
+				{RequirementID: "package_telnet_removed"},
+				{RequirementID: "set_password_hashing_algorithm_logindefs"},
+				{RequirementID: "set_password_hashing_algorithm_systemauth"},
 			},
-			expectedError:  false,
 			expectedResult: []xccdf.SelectElement{},
 		},
 		{
-			name: "One rule missing in datastream",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "package_telnet-server_removed"}},
-				{Rule: extensions.Rule{ID: "package_telnet_removed"}},
-				{Rule: extensions.Rule{ID: "set_password_hashing_algorithm_logindefs"}},
-				{Rule: extensions.Rule{ID: "set_password_hashing_algorithm_systemauth"}},
-				{Rule: extensions.Rule{ID: "this_rule_is_not_in_datastream"}},
-			},
-			expectedError:  true,
-			expectedResult: nil,
-		},
-		{
-			name:        "No rules in OSCAL policy",
-			oscalPolicy: policy.Policy{},
+			name:          "No rules in configuration",
+			configuration: []plugin.AssessmentConfiguration{},
 			expectedResult: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_package_telnet-server_removed", Selected: false},
 				{IDRef: "xccdf_org.ssgproject.content_rule_package_telnet_removed", Selected: false},
@@ -398,15 +449,14 @@ func TestGetTailoringSelections(t *testing.T) {
 			},
 		},
 		{
-			name: "Additional rule in OSCAL policy",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{ID: "package_telnet-server_removed"}},
-				{Rule: extensions.Rule{ID: "package_telnet_removed"}},
-				{Rule: extensions.Rule{ID: "set_password_hashing_algorithm_logindefs"}},
-				{Rule: extensions.Rule{ID: "set_password_hashing_algorithm_systemauth"}},
-				{Rule: extensions.Rule{ID: "account_unique_id"}},
+			name: "Additional rule in configuration",
+			configuration: []plugin.AssessmentConfiguration{
+				{RequirementID: "package_telnet-server_removed"},
+				{RequirementID: "package_telnet_removed"},
+				{RequirementID: "set_password_hashing_algorithm_logindefs"},
+				{RequirementID: "set_password_hashing_algorithm_systemauth"},
+				{RequirementID: "account_unique_id"},
 			},
-			expectedError: false,
 			expectedResult: []xccdf.SelectElement{
 				{IDRef: "xccdf_org.ssgproject.content_rule_account_unique_id", Selected: true},
 			},
@@ -415,10 +465,7 @@ func TestGetTailoringSelections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := getTailoringSelections(tt.oscalPolicy, parsedProfile, dsPath)
-			if (err != nil) != tt.expectedError {
-				t.Errorf("getTailoringSelections() error = %v; want %v", err, tt.expectedError)
-			}
+			result := getTailoringSelections(tt.configuration, parsedProfile)
 			if len(result) != len(tt.expectedResult) {
 				t.Errorf("getTailoringSelections() length = %v; want %v", len(result), len(tt.expectedResult))
 			}
@@ -437,7 +484,7 @@ func TestUpdateTailoringValues(t *testing.T) {
 		name            string
 		tailoringValues []xccdf.SetValueElement
 		dsProfileValues []xccdf.SetValueElement
-		oscalPolicy     policy.Policy
+		configuration   []plugin.AssessmentConfiguration
 		expectedValues  []xccdf.SetValueElement
 	}{
 		{
@@ -447,13 +494,9 @@ func TestUpdateTailoringValues(t *testing.T) {
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "value1"},
 				{IDRef: "xccdf_org.ssgproject.content_value_var2", Value: "value2"},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var1", Value: "value1"}},
-				}},
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var2", Value: "value2"}},
-				}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var1": "value1"}},
+				{Parameters: map[string]string{"var2": "value2"}},
 			},
 			expectedValues: []xccdf.SetValueElement{},
 		},
@@ -463,13 +506,9 @@ func TestUpdateTailoringValues(t *testing.T) {
 			dsProfileValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "value1"},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var1", Value: "value1"}},
-				}},
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var2", Value: "value2"}},
-				}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var1": "value1"}},
+				{Parameters: map[string]string{"var2": "value2"}},
 			},
 			expectedValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var2", Value: "value2"},
@@ -479,13 +518,9 @@ func TestUpdateTailoringValues(t *testing.T) {
 			name:            "All additional values",
 			tailoringValues: []xccdf.SetValueElement{},
 			dsProfileValues: []xccdf.SetValueElement{},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var1", Value: "value1"}},
-				}},
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var2", Value: "value2"}},
-				}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var1": "value1"}},
+				{Parameters: map[string]string{"var2": "value2"}},
 			},
 			expectedValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "value1"},
@@ -498,10 +533,8 @@ func TestUpdateTailoringValues(t *testing.T) {
 			dsProfileValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "old_value"},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var1", Value: "new_value"}},
-				}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var1": "new_value"}},
 			},
 			expectedValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "new_value"},
@@ -513,8 +546,8 @@ func TestUpdateTailoringValues(t *testing.T) {
 			dsProfileValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "value1"},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{Parameters: nil}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: nil},
 			},
 			expectedValues: []xccdf.SetValueElement{},
 		},
@@ -524,16 +557,10 @@ func TestUpdateTailoringValues(t *testing.T) {
 			dsProfileValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var1", Value: "value1"},
 			},
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var1", Value: "value1"}},
-				}},
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var2", Value: "value2"}},
-				}},
-				{Rule: extensions.Rule{
-					Parameters: []extensions.Parameter{{ID: "var2", Value: "value2"}},
-				}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var1": "value1"}},
+				{Parameters: map[string]string{"var2": "value2"}},
+				{Parameters: map[string]string{"var2": "value2"}},
 			},
 			expectedValues: []xccdf.SetValueElement{
 				{IDRef: "xccdf_org.ssgproject.content_value_var2", Value: "value2"},
@@ -543,7 +570,7 @@ func TestUpdateTailoringValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := updateTailoringValues(tt.tailoringValues, tt.dsProfileValues, tt.oscalPolicy)
+			result := updateTailoringValues(tt.tailoringValues, tt.dsProfileValues, tt.configuration)
 			if len(result) != len(tt.expectedValues) {
 				t.Errorf("updateTailoringValues() length = %v; want %v", len(result), len(tt.expectedValues))
 			}
@@ -562,46 +589,46 @@ func TestGetTailoringValues(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		oscalPolicy    policy.Policy
+		configuration  []plugin.AssessmentConfiguration
 		expectedError  bool
 		expectedResult []xccdf.SetValueElement
 	}{
 		{
 			name: "All variables present",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_hashing_algorithm", Value: "SHA512"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_hashing_algorithm_pam", Value: "sha512"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_accounts_tmout", Value: "900"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_pam_remember_control_flag", Value: "requisite,required"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_pam_remember", Value: "5"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_system_crypto_policy", Value: "DEFAULT"}}}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var_password_hashing_algorithm": "SHA512"}},
+				{Parameters: map[string]string{"var_password_hashing_algorithm_pam": "sha512"}},
+				{Parameters: map[string]string{"var_accounts_tmout": "900"}},
+				{Parameters: map[string]string{"var_password_pam_remember_control_flag": "requisite,required"}},
+				{Parameters: map[string]string{"var_password_pam_remember": "5"}},
+				{Parameters: map[string]string{"var_system_crypto_policy": "DEFAULT"}},
 			},
 			expectedError:  false,
 			expectedResult: []xccdf.SetValueElement{},
 		},
 		{
 			name: "One variable missing in datastream",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_hashing_algorithm", Value: "SHA512"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_hashing_algorithm_pam", Value: "sha512"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_accounts_tmout", Value: "900"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_pam_remember_control_flag", Value: "requisite,required"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_pam_remember", Value: "5"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "this_variable_is_not_in_datastream", Value: "value"}}}},
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var_password_hashing_algorithm": "SHA512"}},
+				{Parameters: map[string]string{"var_password_hashing_algorithm_pam": "sha512"}},
+				{Parameters: map[string]string{"var_accounts_tmout": "900"}},
+				{Parameters: map[string]string{"var_password_pam_remember_control_flag": "requisite,required"}},
+				{Parameters: map[string]string{"var_password_pam_remember": "5"}},
+				{Parameters: map[string]string{"this_variable_is_not_in_datastream": "value"}},
 			},
 			expectedError:  true,
 			expectedResult: nil,
 		},
 		{
-			name: "Additional variable in OSCAL policy",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_hashing_algorithm", Value: "SHA512"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_hashing_algorithm_pam", Value: "sha512"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_accounts_tmout", Value: "900"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_pam_remember_control_flag", Value: "requisite,required"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_password_pam_remember", Value: "5"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_system_crypto_policy", Value: "DEFAULT"}}}},
-				{Rule: extensions.Rule{Parameters: []extensions.Parameter{{ID: "var_selinux_policy_name", Value: "mls"}}}},
+			name: "Additional variable in configuration",
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: map[string]string{"var_password_hashing_algorithm": "SHA512"}},
+				{Parameters: map[string]string{"var_password_hashing_algorithm_pam": "sha512"}},
+				{Parameters: map[string]string{"var_accounts_tmout": "900"}},
+				{Parameters: map[string]string{"var_password_pam_remember_control_flag": "requisite,required"}},
+				{Parameters: map[string]string{"var_password_pam_remember": "5"}},
+				{Parameters: map[string]string{"var_system_crypto_policy": "DEFAULT"}},
+				{Parameters: map[string]string{"var_selinux_policy_name": "mls"}},
 			},
 			expectedError: false,
 			expectedResult: []xccdf.SetValueElement{
@@ -609,9 +636,9 @@ func TestGetTailoringValues(t *testing.T) {
 			},
 		},
 		{
-			name: "OSCAL policy without variables",
-			oscalPolicy: policy.Policy{
-				{Rule: extensions.Rule{Parameters: nil}},
+			name: "Configuration without variables",
+			configuration: []plugin.AssessmentConfiguration{
+				{Parameters: nil},
 			},
 			expectedError:  false,
 			expectedResult: []xccdf.SetValueElement{},
@@ -619,11 +646,10 @@ func TestGetTailoringValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		// Variables options are resolved during the process, so we need to get the profile element again.
 		parsedProfile, _ := getProfileElementTest(t, "xccdf_org.ssgproject.content_profile_test_profile")
 
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := getTailoringValues(tt.oscalPolicy, parsedProfile, dsPath)
+			result, err := getTailoringValues(tt.configuration, parsedProfile, dsPath)
 			if (err != nil) != tt.expectedError {
 				t.Errorf("getTailoringValues() error = %v; want %v", err, tt.expectedError)
 			}
@@ -644,19 +670,10 @@ func TestGetTailoringProfile(t *testing.T) {
 	dsPath := filepath.Join(testDataDir, "ssg-rhel-ds.xml")
 	profileId := "test_profile"
 
-	tailoringPolicy := policy.Policy{
+	tailoringConfig := []plugin.AssessmentConfiguration{
 		{
-			Rule: extensions.Rule{
-				ID:          "set_password_hashing_algorithm_logindefs",
-				Description: "Set Password Hashing Algorithm in /etc/login.defs",
-				Parameters: []extensions.Parameter{
-					{
-						ID:          "var_password_hashing_algorithm",
-						Description: "Password Hashing algorithm",
-						Value:       "YESCRYPT",
-					},
-				},
-			},
+			RequirementID: "set_password_hashing_algorithm_logindefs",
+			Parameters:    map[string]string{"var_password_hashing_algorithm": "YESCRYPT"},
 		},
 	}
 
@@ -675,7 +692,7 @@ func TestGetTailoringProfile(t *testing.T) {
 		},
 	}
 
-	result, err := getTailoringProfile(profileId, dsPath, tailoringPolicy)
+	result, err := getTailoringProfile(profileId, dsPath, tailoringConfig)
 	if err != nil {
 		t.Fatalf("getTailoringProfile() error = %v", err)
 	}
@@ -694,9 +711,6 @@ func TestGetTailoringProfile(t *testing.T) {
 	}
 }
 
-// This is a supporting function used by TestPolicyToXML.
-// It removes the time attribute from the XML because it is generated
-// dynamically and may differ in some seconds during the tests.
 func removeVersionTimeTest(xml string) string {
 	re := regexp.MustCompile(`time="[^"]*"`)
 	return re.ReplaceAllString(xml, `time=""`)
@@ -707,25 +721,12 @@ func TestPolicyToXML(t *testing.T) {
 	dsPath := filepath.Join(testDataDir, "ssg-rhel-ds.xml")
 	profileId := "test_profile"
 
-	tailoringPolicy := policy.Policy{
+	tailoringConfig := []plugin.AssessmentConfiguration{
 		{
-			Rule: extensions.Rule{
-				ID:          "account_unique_id",
-				Description: "Ensure All Accounts on the System Have Unique User IDs",
-				Parameters: []extensions.Parameter{
-					{
-						ID:          "var_password_hashing_algorithm",
-						Description: "Password Hashing algorithm",
-						Value:       "YESCRYPT",
-					},
-				},
-			},
+			RequirementID: "account_unique_id",
+			Parameters:    map[string]string{"var_password_hashing_algorithm": "YESCRYPT"},
 		},
 	}
-
-	cfg := new(config.Config)
-	cfg.Files.Datastream = dsPath
-	cfg.Parameters.Profile = profileId
 
 	expectedXML := `<?xml version="1.0" encoding="UTF-8"?>
 <xccdf-1.2:Tailoring xmlns:xccdf-1.2="http://checklists.nist.gov/xccdf/1.2" id="xccdf_complytime.openscapplugin_tailoring_complytime">
@@ -742,13 +743,11 @@ func TestPolicyToXML(t *testing.T) {
   </xccdf-1.2:Profile>
 </xccdf-1.2:Tailoring>`
 
-	result, err := PolicyToXML(tailoringPolicy, cfg)
+	result, err := PolicyToXML(tailoringConfig, dsPath, profileId)
 	if err != nil {
 		t.Fatalf("PolicyToXML() error = %v", err)
 	}
 
-	// It takes some seconds to generate the tailoring file and the time differs.
-	// So we remove the time attribute to compare the XMLs.
 	expected := removeVersionTimeTest(expectedXML)
 	actual := removeVersionTimeTest(result)
 

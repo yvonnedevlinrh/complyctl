@@ -11,107 +11,169 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/ComplianceAsCode/compliance-operator/pkg/utils"
 	"github.com/antchfx/xmlquery"
 	"github.com/hashicorp/go-hclog"
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
 
 	"github.com/complytime/complyctl/cmd/openscap-plugin/config"
 	"github.com/complytime/complyctl/cmd/openscap-plugin/oscap"
 	"github.com/complytime/complyctl/cmd/openscap-plugin/scan"
 	"github.com/complytime/complyctl/cmd/openscap-plugin/xccdf"
+	"github.com/complytime/complyctl/internal/complytime"
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 var (
-	_ policy.Provider = (*PluginServer)(nil)
-	// ovalRegex is a regular expression for capturing the check short name
-	// in an OVAL check definition identifier.
-	ovalRegex = regexp.MustCompile(`^[^:]*?:[^-]*?-(.*?):.*?$`)
+	_ plugin.Plugin = (*PluginServer)(nil)
+	ovalRegex       = regexp.MustCompile(`^[^:]*?:[^-]*?-(.*?):.*?$`)
 )
 
 const ovalCheckType = "http://oval.mitre.org/XMLSchema/oval-definitions-5"
 
-type PluginServer struct {
-	Config *config.Config
+type PluginServer struct{}
+
+func New() *PluginServer {
+	return &PluginServer{}
 }
 
-func New() PluginServer {
-	return PluginServer{
-		Config: config.NewConfig(),
+func (s *PluginServer) Describe(_ context.Context, _ *plugin.DescribeRequest) (*plugin.DescribeResponse, error) {
+	return &plugin.DescribeResponse{
+		Healthy:                 true,
+		Version:                 "0.1.0",
+		RequiredTargetVariables: []string{"profile"},
+	}, nil
+}
+
+func (s *PluginServer) Generate(ctx context.Context, req *plugin.GenerateRequest) (*plugin.GenerateResponse, error) {
+	if len(req.Configuration) == 0 {
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: "no assessment configurations provided",
+		}, nil
 	}
-}
 
-func (s PluginServer) Configure(_ context.Context, configMap map[string]string) error {
-	return s.Config.LoadSettings(configMap)
-}
+	vars := mergeVariables(req.GlobalVariables, req.TargetVariables)
 
-func (s PluginServer) Generate(_ context.Context, policy policy.Policy) error {
+	profile, err := config.SanitizeInput(vars["profile"])
+	if err != nil {
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("invalid profile: %v", err),
+		}, nil
+	}
+
+	datastream, err := config.ResolveDatastream(vars["datastream"])
+	if err != nil {
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("datastream error: %v", err),
+		}, nil
+	}
+
+	if err := config.EnsureDirectories(); err != nil {
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("directory setup failed: %v", err),
+		}, nil
+	}
+
 	hclog.Default().Info("Generating a tailoring file")
-	tailoringXML, err := xccdf.PolicyToXML(policy, s.Config)
+	tailoringXML, err := xccdf.PolicyToXML(req.Configuration, datastream, profile)
 	if err != nil {
-		return err
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("tailoring generation failed: %v", err),
+		}, nil
 	}
 
-	policyPath := s.Config.Files.Policy
-	dst, err := os.Create(policyPath)
+	dst, err := os.Create(config.PolicyPath)
 	if err != nil {
-		return err
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("failed to create policy file: %v", err),
+		}, nil
 	}
 	defer dst.Close()
 	if _, err := dst.WriteString(tailoringXML); err != nil {
-		return err
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("failed to write policy file: %v", err),
+		}, nil
 	}
 
-	// Generate remedation files
-	hclog.Default().Info(("Generating remediation files"))
-	pluginDir := filepath.Join(s.Config.Files.Workspace, config.PluginDir)
-	err = oscap.OscapGenerateFix(pluginDir, s.Config.Parameters.Profile, s.Config.Files.Policy, s.Config.Files.Datastream)
-	if err != nil {
-		return err
+	hclog.Default().Info("Generating remediation files")
+	pluginDir := filepath.Join(complytime.WorkspaceDir, config.PluginDir)
+	if err := oscap.OscapGenerateFix(ctx, pluginDir, profile, config.PolicyPath, datastream); err != nil {
+		return &plugin.GenerateResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("remediation generation failed: %v", err),
+		}, nil
 	}
-	return nil
+
+	return &plugin.GenerateResponse{Success: true}, nil
 }
 
-func (s PluginServer) GetResults(_ context.Context, oscalPolicy policy.Policy) (policy.PVPResult, error) {
-	pvpResults := policy.PVPResult{}
-	policyChecks := newChecks()
+func (s *PluginServer) Scan(ctx context.Context, req *plugin.ScanRequest) (*plugin.ScanResponse, error) {
+	if len(req.Targets) == 0 {
+		return nil, fmt.Errorf("no targets provided")
+	}
+	vars := req.Targets[0].Variables
 
-	_, err := scan.ScanSystem(s.Config, s.Config.Parameters.Profile)
+	profile, err := config.SanitizeInput(vars["profile"])
 	if err != nil {
-		return policy.PVPResult{}, err
+		return nil, fmt.Errorf("invalid profile: %w", err)
 	}
 
-	policyChecks.LoadPolicy(oscalPolicy)
-
-	// get some results here
-	file, err := os.Open(filepath.Clean(s.Config.Files.ARF))
+	datastream, err := config.ResolveDatastream(vars["datastream"])
 	if err != nil {
-		return policy.PVPResult{}, err
+		return nil, fmt.Errorf("datastream error: %w", err)
+	}
+
+	hclog.Default().Info("Running scan", "profile", profile, "datastream", datastream)
+	_, err = scan.ScanSystem(ctx, datastream, profile)
+	if err != nil {
+		return nil, fmt.Errorf("scan failed: %w", err)
+	}
+
+	file, err := os.Open(filepath.Clean(config.ARFPath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ARF: %w", err)
 	}
 	defer file.Close()
 
-	xmlnode, err := utils.ParseContent(bufio.NewReader(file))
+	xmlnode, err := xmlquery.Parse(bufio.NewReader(file))
 	if err != nil {
-		return policy.PVPResult{}, err
+		return nil, fmt.Errorf("failed to parse ARF: %w", err)
 	}
 
-	// extract hostname from xml to use in subject, this will
-	// map to in inventory item in the OSCAL assessment results
 	targetEl := xmlnode.SelectElement("//target")
 	if targetEl == nil {
-		return policy.PVPResult{}, errors.New("result has no 'target' attribute")
+		return nil, errors.New("result has no 'target' attribute")
 	}
 	target := targetEl.InnerText()
-	hclog.Default().Debug(fmt.Sprintf("hostname from results target is %s", target))
 
 	ruleTable := xccdf.NewRuleHashTable(xmlnode)
 	results := xmlnode.SelectElements("//rule-result")
+
+	var assessments []plugin.AssessmentLog
+
 	for i := range results {
 		result := results[i]
-		ruleIDRef := result.SelectAttr("idref")
 
+		resultEl := result.SelectElement("result")
+		if resultEl == nil {
+			continue
+		}
+		resultText := resultEl.InnerText()
+
+		// Only report rules that oscap actually evaluated. The tailoring
+		// file already constrains the selected rules; unselected ones
+		// appear as "notselected" and are not assessment-relevant.
+		if resultText == "notselected" || resultText == "notapplicable" {
+			continue
+		}
+
+		ruleIDRef := result.SelectAttr("idref")
 		rule, ok := ruleTable[ruleIDRef]
 		if !ok {
 			continue
@@ -127,73 +189,46 @@ func (s PluginServer) GetResults(_ context.Context, oscalPolicy policy.Policy) (
 		if ovalRefEl == nil {
 			continue
 		}
-		ovalCheck, err := parseCheck(ovalRefEl)
+		requirementID, err := parseCheck(ovalRefEl)
 		if err != nil {
-			return policy.PVPResult{}, err
+			return nil, err
 		}
-		if policyChecks.Has(ovalCheck) {
-			mappedResult, err := mapResultStatus(result)
-			if err != nil {
-				return policy.PVPResult{}, err
-			}
-			observation := policy.ObservationByCheck{
-				Title:     ruleIDRef,
-				Methods:   []string{"AUTOMATED"},
-				Collected: time.Now(),
-				CheckID:   ovalCheck,
-				Subjects: []policy.Subject{
-					{
-						Title:       fmt.Sprintf("Host %s", target),
-						Type:        "inventory-item",
-						ResourceID:  target,
-						EvaluatedOn: time.Now(),
-						Result:      mappedResult,
-						Reason:      fmt.Sprintf("openscap rule-result is %s", result.SelectElement("result").InnerText()),
-						Props: []policy.Property{
-							{
-								Name:  "hostname",
-								Value: target,
-							},
-						},
-					},
+
+		mappedResult, err := mapResultStatus(resultText)
+		if err != nil {
+			return nil, err
+		}
+
+		assessments = append(assessments, plugin.AssessmentLog{
+			RequirementID: requirementID,
+			Steps: []plugin.Step{
+				{
+					Name:    ruleIDRef,
+					Result:  mappedResult,
+					Message: ruleResultMessage(rule, result, resultText),
 				},
-				RelevantEvidences: []policy.Link{
-					{
-						Href:        fmt.Sprintf("file://%s", s.Config.Files.ARF),
-						Description: "ARF_FILE",
-					},
-				},
-			}
-			pvpResults.ObservationsByCheck = append(pvpResults.ObservationsByCheck, observation)
-		}
+			},
+			Message:    fmt.Sprintf("Host %s evaluated", target),
+			Confidence: plugin.ConfidenceLevelHigh,
+		})
 	}
-	return pvpResults, nil
+
+	return &plugin.ScanResponse{Assessments: assessments}, nil
 }
 
-// checks is a Set implementation for comparing OSCAL
-// and OVAL checks ids.
-type checks map[string]struct{}
-
-func newChecks() checks {
-	policyChecks := make(checks)
-	return policyChecks
-}
-
-func (c checks) LoadPolicy(oscalPolicy policy.Policy) {
-	for _, rule := range oscalPolicy {
-		for _, check := range rule.Checks {
-			c[check.ID] = struct{}{}
-		}
+// mergeVariables combines global and target variable maps into a single
+// config map. Target variables override global ones for the same key.
+func mergeVariables(global, target map[string]string) map[string]string {
+	merged := make(map[string]string, len(global)+len(target))
+	for k, v := range global {
+		merged[k] = v
 	}
+	for k, v := range target {
+		merged[k] = v
+	}
+	return merged
 }
 
-func (c checks) Has(check string) bool {
-	_, ok := c[check]
-	return ok
-}
-
-// parseCheck returns the check short name without the OVAL-specific naming from a
-// rule in results.
 func parseCheck(check *xmlquery.Node) (string, error) {
 	ovalCheckName := strings.TrimSpace(check.SelectAttr("name"))
 	if ovalCheckName == "" {
@@ -205,25 +240,46 @@ func parseCheck(check *xmlquery.Node) (string, error) {
 	if len(matches) < minimumPart {
 		return "", fmt.Errorf("check id %q is in unexpected format", ovalCheckName)
 	}
-	trimmedCheckName := matches[shortNameLoc]
-	return trimmedCheckName, nil
+	return matches[shortNameLoc], nil
 }
 
-func mapResultStatus(result *xmlquery.Node) (policy.Result, error) {
-	resultEl := result.SelectElement("result")
-	if resultEl == nil {
-		return policy.ResultInvalid, errors.New("result node has no 'result' attribute")
-	}
-	switch resultEl.InnerText() {
-	case "pass", "fixed":
-		return policy.ResultPass, nil
-	case "fail":
-		return policy.ResultFail, nil
-	case "notselected", "notapplicable":
-		return policy.ResultError, nil
-	case "error", "unknown":
-		return policy.ResultError, nil
+// ruleResultMessage builds a human-readable step message from the XCCDF
+// Rule definition and rule-result node. Prefers the rule title over the
+// raw ID, and appends any diagnostic messages OpenSCAP emitted.
+func ruleResultMessage(rule *xmlquery.Node, result *xmlquery.Node, resultText string) string {
+	title := ""
+	if el := rule.SelectElement("xccdf-1.2:title"); el != nil {
+		title = strings.TrimSpace(el.InnerText())
 	}
 
-	return policy.ResultInvalid, fmt.Errorf("couldn't match %s", resultEl.InnerText())
+	var parts []string
+	for _, msg := range result.SelectElements("message") {
+		if t := strings.TrimSpace(msg.InnerText()); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	diagnostic := strings.Join(parts, "; ")
+
+	if title != "" && diagnostic != "" {
+		return fmt.Sprintf("%s — %s (%s)", title, diagnostic, resultText)
+	}
+	if title != "" {
+		return fmt.Sprintf("%s (%s)", title, resultText)
+	}
+	if diagnostic != "" {
+		return fmt.Sprintf("%s (%s)", diagnostic, resultText)
+	}
+	return fmt.Sprintf("openscap rule-result is %s", resultText)
+}
+
+func mapResultStatus(resultText string) (plugin.Result, error) {
+	switch resultText {
+	case "pass", "fixed":
+		return plugin.ResultPassed, nil
+	case "fail":
+		return plugin.ResultFailed, nil
+	case "error", "unknown":
+		return plugin.ResultError, nil
+	}
+	return plugin.ResultError, fmt.Errorf("couldn't match %s", resultText)
 }

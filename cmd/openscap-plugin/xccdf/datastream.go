@@ -7,8 +7,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/ComplianceAsCode/compliance-operator/pkg/xccdf"
 	"github.com/antchfx/xmlquery"
+
+	xccdf "github.com/complytime/complyctl/cmd/openscap-plugin/xccdftype"
 )
 
 const (

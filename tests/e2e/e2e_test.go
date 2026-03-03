@@ -1,264 +1,536 @@
+// SPDX-License-Identifier: Apache-2.0
+
 //go:build e2e
 
+// End-to-end tests for the complytime CLI exercising the full Gemara workflow.
+// Uses an in-process mock OCI registry and the complyctl-provider-test binary.
+//
+// Run:
+//
+//	make test-e2e
+//
+// Or manually:
+//
+//	make build build-test-plugin
+//	go test -tags=e2e -mod=vendor ./tests/e2e/... -v -count=1 -timeout 120s
 package e2e
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/complytime/complyctl/internal/complytime"
 )
 
-const (
-	FrameworkID = "cusp_fedora"
-	controlID   = "cusp_fedora_1-1"
-	ruleID      = "file_groupowner_grub2_cfg"
-	parameterID = "var_rekey_limit_size"
-	configPath  = "../testdata/config.yml"
-)
+const testPolicyID = "nist-800-53-r5"
 
-func TestComplyctlHelp(t *testing.T) {
-	// Run the "complyctl --help" command
-	cmd := exec.Command("complyctl", "--help")
-	output, err := cmd.CombinedOutput()
+// TestE2E_FullWorkflow exercises the entire Gemara workflow:
+//  1. complytime get    — fetch policies from mock OCI registry into cache
+//  2. complytime list   — verify cached policies appear
+//  3. complytime generate — resolve policy graph, invoke test plugin
+//  4. complytime scan --format oscal  — produce OSCAL assessment-results
+//  5. complytime scan --format pretty — produce Markdown report
+//  6. complytime scan --format sarif  — produce SARIF report
+func TestE2E_FullWorkflow(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
 
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl --help: %v\nOutput: %s", err, string(output))
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	installTestPlugin(t, homeDir)
+	writeWorkspaceConfig(t, workDir, srv.URL, testPolicyID)
+	env := buildEnv(homeDir)
+
+	// Step 1: get
+	t.Run("get", func(t *testing.T) {
+		out := runComplytime(t, binary, workDir, env, "get")
+		t.Log(out)
+		assert.Contains(t, out, "Synchronization completed.")
+
+		cacheDir := filepath.Join(homeDir, ".complytime", "policies", testPolicyID)
+		assert.DirExists(t, cacheDir, "policy cache directory must exist after get")
+		assert.FileExists(t, filepath.Join(cacheDir, "oci-layout"), "OCI layout marker required")
+
+		stateFile := filepath.Join(homeDir, ".complytime", "state.json")
+		assert.FileExists(t, stateFile, "state.json must track synced policies")
+
+		stateData, err := os.ReadFile(stateFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(stateData), testPolicyID)
+	})
+
+	// Step 2: list
+	t.Run("list", func(t *testing.T) {
+		out := runComplytime(t, binary, workDir, env, "list")
+		t.Log(out)
+		assert.Contains(t, out, testPolicyID)
+	})
+
+	// Step 3: generate
+	t.Run("generate", func(t *testing.T) {
+		out := runComplytime(t, binary, workDir, env,
+			"generate", "--policy-id", testPolicyID)
+		t.Log(out)
+		assert.Contains(t, out, "Generation completed.")
+	})
+
+	// Step 4: scan --format oscal
+	t.Run("scan_oscal", func(t *testing.T) {
+		scanDir := filepath.Join(workDir, "scan-oscal")
+		require.NoError(t, os.MkdirAll(scanDir, 0755))
+		copyWorkspaceConfig(t, workDir, scanDir)
+
+		out := runComplytime(t, binary, scanDir, env,
+			"scan", "--policy-id", testPolicyID, "--format", "oscal")
+		t.Log(out)
+		assert.Contains(t, out, "requirements:")
+
+		evalDir := filepath.Join(scanDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
+		assertOutputFile(t, evalDir, "evaluation-log-", ".yaml")
+		oscalFile := assertOutputFile(t, scanDir, "assessment-results-", ".json")
+
+		data, err := os.ReadFile(oscalFile)
+		require.NoError(t, err)
+		var doc map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &doc))
+		ar, ok := doc["assessment-results"].(map[string]interface{})
+		require.True(t, ok, "must have assessment-results root key")
+		assert.Contains(t, ar, "uuid")
+		assert.Contains(t, ar, "metadata")
+		assert.Contains(t, ar, "results")
+
+		meta := ar["metadata"].(map[string]interface{})
+		assert.Equal(t, "1.1.3", meta["oscal-version"])
+	})
+
+	// Step 5: scan --format pretty
+	t.Run("scan_pretty", func(t *testing.T) {
+		scanDir := filepath.Join(workDir, "scan-pretty")
+		require.NoError(t, os.MkdirAll(scanDir, 0755))
+		copyWorkspaceConfig(t, workDir, scanDir)
+
+		out := runComplytime(t, binary, scanDir, env,
+			"scan", "--policy-id", testPolicyID, "--format", "pretty")
+		t.Log(out)
+		assert.Contains(t, out, "requirements:")
+
+		evalDir := filepath.Join(scanDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
+		assertOutputFile(t, evalDir, "evaluation-log-", ".yaml")
+		mdFile := assertOutputFile(t, scanDir, "report-", ".md")
+
+		data, err := os.ReadFile(mdFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "Compliance Scan Report")
+		assert.Contains(t, string(data), testPolicyID)
+	})
+
+	// Step 6: scan --format sarif
+	t.Run("scan_sarif", func(t *testing.T) {
+		scanDir := filepath.Join(workDir, "scan-sarif")
+		require.NoError(t, os.MkdirAll(scanDir, 0755))
+		copyWorkspaceConfig(t, workDir, scanDir)
+
+		out := runComplytime(t, binary, scanDir, env,
+			"scan", "--policy-id", testPolicyID, "--format", "sarif")
+		t.Log(out)
+		assert.Contains(t, out, "requirements:")
+
+		evalDir := filepath.Join(scanDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
+		assertOutputFile(t, evalDir, "evaluation-log-", ".yaml")
+		sarifFile := assertOutputFile(t, scanDir, "scan-", ".json")
+
+		data, err := os.ReadFile(sarifFile)
+		require.NoError(t, err)
+		var doc map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &doc))
+		assert.Contains(t, doc, "$schema", "SARIF must have $schema")
+		assert.Equal(t, "2.1.0", doc["version"], "SARIF version must be 2.1.0")
+	})
+}
+
+// TestE2E_PolicyCache verifies the OCI cache structure and state tracking after get.
+func TestE2E_PolicyCache(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
+
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	writeWorkspaceConfig(t, workDir, srv.URL, testPolicyID)
+	env := buildEnv(homeDir)
+
+	runComplytime(t, binary, workDir, env, "get")
+
+	storePath := filepath.Join(homeDir, ".complytime", "policies", testPolicyID)
+	assert.DirExists(t, storePath)
+	assert.FileExists(t, filepath.Join(storePath, "oci-layout"))
+
+	stateFile := filepath.Join(homeDir, ".complytime", "state.json")
+	stateData, err := os.ReadFile(stateFile)
+	require.NoError(t, err)
+
+	var state map[string]interface{}
+	require.NoError(t, json.Unmarshal(stateData, &state))
+
+	policies, ok := state["policies"].(map[string]interface{})
+	require.True(t, ok, "state.json must contain policies map")
+
+	policyState, ok := policies[testPolicyID].(map[string]interface{})
+	require.True(t, ok, "state.json must track policy %s", testPolicyID)
+	assert.NotEmpty(t, policyState["digest"])
+	assert.NotEmpty(t, policyState["version"])
+}
+
+// TestE2E_MultiplePolicies verifies fetching and listing multiple policies.
+func TestE2E_MultiplePolicies(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
+
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	env := buildEnv(homeDir)
+
+	configYAML := fmt.Sprintf(`policies:
+  - url: %s/nist-800-53-r5
+    id: nist-800-53-r5
+  - url: %s/cis-benchmark
+    id: cis-benchmark
+targets:
+  - id: multi-target
+    policies:
+      - nist-800-53-r5
+      - cis-benchmark
+    variables:
+      env: test
+`, srv.URL, srv.URL)
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
+
+	out := runComplytime(t, binary, workDir, env, "get")
+	t.Log(out)
+	assert.Contains(t, out, "Synchronization completed.")
+
+	listOut := runComplytime(t, binary, workDir, env, "list")
+	t.Log(listOut)
+	assert.Contains(t, listOut, "nist-800-53-r5")
+	assert.Contains(t, listOut, "cis-benchmark")
+
+	// Both policies must have OCI layout in cache
+	for _, pid := range []string{"nist-800-53-r5", "cis-benchmark"} {
+		storePath := filepath.Join(homeDir, ".complytime", "policies", pid)
+		assert.DirExists(t, storePath, "%s cache dir must exist", pid)
+		assert.FileExists(t, filepath.Join(storePath, "oci-layout"), "%s must have oci-layout", pid)
 	}
+}
 
-	// Convert the output to a string and check if expected text is present
-	outputStr := string(output)
+// TestE2E_ScanDefaultFormat verifies scan without --format produces only EvaluationLog.
+func TestE2E_ScanDefaultFormat(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
 
-	// Assert that "Usage" or the expected help message is part of the output
-	// Use a table-driven test for clear, maintainable assertions
-	expectedSubstrings := []string{
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	installTestPlugin(t, homeDir)
+	writeWorkspaceConfig(t, workDir, srv.URL, testPolicyID)
+	env := buildEnv(homeDir)
+
+	runComplytime(t, binary, workDir, env, "get")
+
+	out := runComplytime(t, binary, workDir, env,
+		"scan", "--policy-id", testPolicyID)
+	t.Log(out)
+	assert.Contains(t, out, "requirements:")
+
+	outDir := filepath.Join(workDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
+	assertOutputFile(t, outDir, "evaluation-log-", ".yaml")
+
+	// Verify no formatted report files exist
+	entries, err := os.ReadDir(outDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		name := e.Name()
+		assert.False(t, strings.HasPrefix(name, "assessment-results-"),
+			"OSCAL output must not exist without --format oscal")
+		assert.False(t, strings.HasPrefix(name, "report-"),
+			"Markdown output must not exist without --format pretty")
+	}
+}
+
+// TestE2E_InvalidFormat verifies invalid scan format is rejected.
+func TestE2E_InvalidFormat(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
+
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	installTestPlugin(t, homeDir)
+	writeWorkspaceConfig(t, workDir, srv.URL, testPolicyID)
+	env := buildEnv(homeDir)
+
+	runComplytime(t, binary, workDir, env, "get")
+
+	cmd := exec.Command(binary,
+		"scan", "--policy-id", testPolicyID, "--format", "pdf")
+	cmd.Dir = workDir
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	assert.Error(t, err, "invalid format must produce error")
+	assert.Contains(t, string(output), "invalid format")
+}
+
+// TestE2E_MissingPolicy verifies scan fails when policy is not cached.
+func TestE2E_MissingPolicy(t *testing.T) {
+	binary := locateBinary(t)
+
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	installTestPlugin(t, homeDir)
+	env := buildEnv(homeDir)
+
+	configYAML := `policies:
+  - url: http://localhost:1/nonexistent-policy
+    id: nonexistent-policy
+targets:
+  - id: test-target
+    policies:
+      - nonexistent-policy
+    variables:
+      env: test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
+
+	cmd := exec.Command(binary, "scan", "--policy-id", "nonexistent-policy")
+	cmd.Dir = workDir
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	assert.Error(t, err, "scan for uncached policy must fail")
+	assert.Contains(t, string(output), "not in cache")
+}
+
+// TestE2E_MockRegistryOCICompliance verifies the mock registry serves valid OCI responses.
+func TestE2E_MockRegistryOCICompliance(t *testing.T) {
+	srv := startMockRegistry(t)
+	defer srv.Close()
+
+	t.Run("v2_endpoint", func(t *testing.T) {
+		resp, err := srv.Client().Get(srv.URL + "/v2/")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "registry/2.0", resp.Header.Get("Docker-Distribution-API-Version"))
+	})
+
+	t.Run("catalog_endpoint", func(t *testing.T) {
+		resp, err := srv.Client().Get(srv.URL + "/v2/_catalog")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, 200, resp.StatusCode)
+
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		repos, ok := body["repositories"].([]interface{})
+		require.True(t, ok, "response must contain repositories array")
+		assert.GreaterOrEqual(t, len(repos), 2, "must serve at least 2 repositories")
+	})
+
+	t.Run("tags_list", func(t *testing.T) {
+		resp, err := srv.Client().Get(srv.URL + "/v2/nist-800-53-r5/tags/list")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, 200, resp.StatusCode)
+
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		tags, ok := body["tags"].([]interface{})
+		require.True(t, ok)
+		assert.GreaterOrEqual(t, len(tags), 1, "policy must have at least one tag")
+	})
+
+	t.Run("manifest_fetch", func(t *testing.T) {
+		resp, err := srv.Client().Get(srv.URL + "/v2/nist-800-53-r5/manifests/latest")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "application/vnd.oci.image.manifest.v1+json", resp.Header.Get("Content-Type"))
+		assert.NotEmpty(t, resp.Header.Get("Docker-Content-Digest"))
+
+		var manifest map[string]interface{}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&manifest))
+		assert.Equal(t, float64(2), manifest["schemaVersion"])
+		layers, ok := manifest["layers"].([]interface{})
+		require.True(t, ok, "manifest must have layers")
+		assert.GreaterOrEqual(t, len(layers), 2, "nist policy must have catalog + policy layers")
+	})
+
+	t.Run("nonexistent_repo", func(t *testing.T) {
+		resp, err := srv.Client().Get(srv.URL + "/v2/does-not-exist/manifests/latest")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, 404, resp.StatusCode)
+	})
+}
+
+// TestE2E_MockPluginDescribe verifies the test plugin binary responds to Describe.
+func TestE2E_MockPluginDescribe(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
+
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	installTestPlugin(t, homeDir)
+	writeWorkspaceConfig(t, workDir, srv.URL, testPolicyID)
+	env := buildEnv(homeDir)
+
+	// Fetch policy first so generate has content
+	runComplytime(t, binary, workDir, env, "get")
+
+	// Generate dispatches to the test plugin via Describe + Generate RPCs
+	out := runComplytime(t, binary, workDir, env,
+		"generate", "--policy-id", testPolicyID)
+	t.Log(out)
+	assert.Contains(t, out, "Generation completed.")
+	assert.NotContains(t, out, "Describe failed",
+		"test plugin must pass describe")
+}
+
+// TestE2E_Help verifies basic help output structure.
+func TestE2E_Help(t *testing.T) {
+	binary := locateBinary(t)
+	cmd := exec.Command(binary, "--help")
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err)
+
+	out := string(output)
+	for _, expected := range []string{
 		"Usage:",
-		"Aliases:",
 		"Available Commands:",
 		"Flags:",
 		"complyctl [command]",
-	}
-
-	for _, expected := range expectedSubstrings {
-		t.Run("Contains "+expected, func(t *testing.T) {
-			assert.True(t, strings.Contains(outputStr, expected), "Help output should contain '%s'", expected)
-		})
+	} {
+		assert.Contains(t, out, expected, "help output must contain %q", expected)
 	}
 }
 
-func TestComplyctlList(t *testing.T) {
-	// Run the "complyctl list" command
-	cmd := exec.Command("complyctl", "list", "--plain")
+// TestE2E_Version verifies the version command produces output.
+func TestE2E_Version(t *testing.T) {
+	binary := locateBinary(t)
+	cmd := exec.Command(binary, "version")
 	output, err := cmd.CombinedOutput()
-
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl list: %v\nOutput: %s", err, string(output))
-	}
-
-	// Convert the output to a string and check if expected content is returned
-	outputStr := string(output)
-
-	// Check if the output contains expected text
-	assert.True(t, len(outputStr) > 0, "Output from 'complyctl list' should not be empty")
-	assert.True(t, strings.Contains(outputStr, FrameworkID))
+	require.NoError(t, err)
+	assert.NotEmpty(t, string(output), "version output must not be empty")
 }
 
-func TestComplyctlInfo(t *testing.T) {
-	testCases := []struct {
-		name             string   // A descriptive name for the sub-test.
-		args             []string // The command-line arguments to pass to "complyctl info".
-		expectedFragment string   // A string we expect to find in the command's output.
-	}{
-		{
-			name:             "show info for FrameworkID",
-			args:             []string{"info", FrameworkID, "--plain"},
-			expectedFragment: FrameworkID,
-		},
-		{
-			name:             "show info for controlID",
-			args:             []string{"info", FrameworkID, "--control", controlID, "--plain"},
-			expectedFragment: controlID,
-		},
-		{
-			name:             "show info for rule",
-			args:             []string{"info", FrameworkID, "--rule", ruleID, "--plain"},
-			expectedFragment: ruleID,
-		},
-		{
-			name:             "show info for parameter",
-			args:             []string{"info", FrameworkID, "--parameter", parameterID, "--plain"},
-			expectedFragment: parameterID,
-		},
-	}
+// TestE2E_NestedPolicyID exercises the full workflow with a slashed policy ID
+// (e.g., "policies/nist-800-53-r5") matching the standalone mock-oci-registry format.
+// Validates that cache listing, output filenames, and plugin routing all handle
+// the "/" correctly.
+func TestE2E_NestedPolicyID(t *testing.T) {
+	nestedID := "policies/nist-800-53-r5"
 
-	// Iterate over the test cases and run each as a sub-test.
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Execute the command
-			cmd := exec.Command("complyctl", tc.args...)
-			output, err := cmd.CombinedOutput()
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
 
-			// It stops the current sub-test on failure.
-			require.NoError(t, err, "command failed unexpectedly. Output: \n%s", string(output))
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	installTestPlugin(t, homeDir)
+	writeWorkspaceConfig(t, workDir, srv.URL, nestedID)
+	env := buildEnv(homeDir)
 
-			// Use assert.Contains for the actual test assertion.
-			assert.Contains(t, string(output), tc.expectedFragment, "output should contain the expected fragment")
-		})
-	}
+	// get
+	t.Run("get", func(t *testing.T) {
+		out := runComplytime(t, binary, workDir, env, "get")
+		t.Log(out)
+		assert.Contains(t, out, "Synchronization completed.")
+
+		storePath := filepath.Join(homeDir, ".complytime", "policies", "policies", "nist-800-53-r5")
+		assert.DirExists(t, storePath, "nested cache directory must exist")
+		assert.FileExists(t, filepath.Join(storePath, "oci-layout"))
+	})
+
+	// list — must not say "(not cached)"
+	t.Run("list", func(t *testing.T) {
+		out := runComplytime(t, binary, workDir, env, "list")
+		t.Log(out)
+		assert.Contains(t, out, "nist-800-53-r5")
+		assert.NotContains(t, out, "(not cached)",
+			"cached nested policy must not show as uncached")
+	})
+
+	// generate
+	t.Run("generate", func(t *testing.T) {
+		out := runComplytime(t, binary, workDir, env,
+			"generate", "--policy-id", nestedID)
+		t.Log(out)
+		assert.Contains(t, out, "Generation completed.")
+	})
+
+	// scan — output files must use sanitized filename (no "/" in filename)
+	t.Run("scan_oscal", func(t *testing.T) {
+		scanDir := filepath.Join(workDir, "scan-nested")
+		require.NoError(t, os.MkdirAll(scanDir, 0755))
+		copyWorkspaceConfig(t, workDir, scanDir)
+
+		out := runComplytime(t, binary, scanDir, env,
+			"scan", "--policy-id", nestedID, "--format", "oscal")
+		t.Log(out)
+		assert.Contains(t, out, "requirements:")
+
+		evalDir := filepath.Join(scanDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
+		evalLog := assertOutputFile(t, evalDir, "evaluation-log-", ".yaml")
+		oscalFile := assertOutputFile(t, scanDir, "assessment-results-", ".json")
+
+		// Filenames must be flat (no intermediate directories from slashed IDs)
+		assert.Equal(t, evalDir, filepath.Dir(evalLog),
+			"evaluation log must be directly in output dir, not nested")
+		assert.Equal(t, scanDir, filepath.Dir(oscalFile),
+			"OSCAL file must be directly in CWD, not nested")
+	})
 }
 
-func TestComplyctlPlan(t *testing.T) {
-	// testCases defines all scenarios we want to test for the 'plan' command.
-	testCases := []struct {
-		name           string   // A descriptive name for the sub-test.
-		args           []string // Arguments to pass to the 'complyctl plan' command.
-		expectedOutput string   // A substring we expect to find in the command's output.
-		expectedFile   string   // The path to a file that should be created.
-		expectError    bool     // Whether we expect the command to fail.
-	}{
-		{
-			name:           "DefaultWorkspace",
-			args:           []string{FrameworkID},
-			expectedOutput: "INFO Assessment plan written to complytime/assessment-plan.json",
-			expectedFile:   "complytime/assessment-plan.json",
-		},
-		{
-			name:           "CustomWorkspace",
-			args:           []string{FrameworkID, "--workspace", "custom_dir"},
-			expectedOutput: "INFO Assessment plan written to custom_dir/assessment-plan.json",
-			expectedFile:   "custom_dir/assessment-plan.json",
-		},
-		{
-			name:           "DryRun",
-			args:           []string{FrameworkID, "--dry-run"},
-			expectedOutput: "controlId:", // Check if the output contains expected text
-			expectedFile:   "",           // No file should be created.
-		},
-		{
-			name:           "DryRunOutFile",
-			args:           []string{FrameworkID, "--dry-run", "--out", "config.yml"},
-			expectedOutput: "", // No output, so we don't check it.
-			expectedFile:   "config.yml",
-		},
-		{
-			name:           "ScopeConfig",
-			args:           []string{FrameworkID, "--scope-config", configPath, "--workspace", "config_dir"},
-			expectedOutput: "INFO Assessment plan written to config_dir/assessment-plan.json",
-			expectedFile:   "config_dir/assessment-plan.json",
-		},
-	}
+// TestE2E_ListFilterByPolicyID verifies the --policy-id filter on list.
+func TestE2E_ListFilterByPolicyID(t *testing.T) {
+	binary := locateBinary(t)
+	srv := startMockRegistry(t)
+	defer srv.Close()
 
-	// Loop through all defined test cases and run them as sub-tests.
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	env := buildEnv(homeDir)
 
-			// Construct the full command arguments.
-			args := append([]string{"plan"}, tc.args...)
-			cmd := exec.Command("complyctl", args...)
+	configYAML := fmt.Sprintf(`policies:
+  - url: %s/nist-800-53-r5
+    id: nist-800-53-r5
+  - url: %s/cis-benchmark
+    id: cis-benchmark
+targets:
+  - id: filter-target
+    policies:
+      - nist-800-53-r5
+      - cis-benchmark
+    variables:
+      env: test
+`, srv.URL, srv.URL)
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
 
-			// Execute the command.
-			output, err := cmd.CombinedOutput()
-			outputStr := string(output)
+	runComplytime(t, binary, workDir, env, "get")
 
-			// Assert that the command's success or failure matches our expectation.
-			if tc.expectError {
-				require.Error(t, err, "Expected an error but got none. Output:\n%s", outputStr)
-			} else {
-				require.NoError(t, err, "Command failed unexpectedly. Output:\n%s", outputStr)
-			}
-
-			// If we expect specific output, check for it.
-			if tc.expectedOutput != "" {
-				assert.Contains(t, outputStr, tc.expectedOutput, "Output did not contain expected text")
-			}
-
-			// If we expect a file to be created, verify it exists.
-			if tc.expectedFile != "" {
-				assert.FileExists(t, tc.expectedFile)
-			}
-		})
-	}
-}
-
-func TestComplyctlGenerate(t *testing.T) {
-
-	cmd := exec.Command("complyctl", "generate")
-	output, err := cmd.CombinedOutput()
-
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl generate: %v\nOutput: %s", err, string(output))
-	}
-
-	// Check if the output contains expected text
-	outputStr := string(output)
-	assert.True(t, strings.Contains(outputStr, "Policy generation process completed"))
-}
-
-func TestComplyctlScan(t *testing.T) {
-	// Run the "complyctl scan" command
-	// In order to improve the performace, without md will be covered in the CustomizePlanWorkflow
-	cmd := exec.Command("complyctl", "scan", "--with-md")
-	output, err := cmd.CombinedOutput()
-
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl scan --with-md: %v\nOutput: %s", err, string(output))
-	}
-
-	// Check if the output contains expected text
-	outputStr := string(output)
-	assert.True(t, strings.Contains(outputStr, "The assessment results in JSON were successfully written to complytime/assessment-results.json"))
-	assert.True(t, strings.Contains(outputStr, "The assessment results in markdown were successfully written to complytime/assessment-results.md"))
-
-	// Check if the assessment-results files exist
-	filePath_json := "complytime/assessment-results.json"
-	filePath_md := "complytime/assessment-results.md"
-	assert.FileExists(t, filePath_json, "Expected file exists:", filePath_json)
-	assert.FileExists(t, filePath_md, "Expected file exists:", filePath_md)
-}
-
-func TestComplyctlCustomizePlanWorkflow(t *testing.T) {
-	// The the workflow of customize the assessment plan via the config.yml
-
-	// 1. Load config.yml to customize the generated assessment plan
-	cmd := exec.Command("complyctl", "plan", FrameworkID, "--scope-config", configPath)
-	output, err := cmd.CombinedOutput()
-
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl plan: %v\nOutput: %s", err, string(output))
-	}
-	// Check if the output contains expected text
-	outputStr := string(output)
-	assert.True(t, strings.Contains(outputStr, "Assessment plan written to complytime/assessment-plan.json"))
-
-	// 2. Generate PVP policy from the assessment plan
-	cmd = exec.Command("complyctl", "generate")
-	output, err = cmd.CombinedOutput()
-
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl generate: %v\nOutput: %s", err, string(output))
-	}
-	// Check if the output contains expected text
-	outputStr = string(output)
-	assert.True(t, strings.Contains(outputStr, "Policy generation process completed"))
-
-	// 3. Scan environment with the customized assessment plan
-	cmd = exec.Command("complyctl", "scan")
-	output, err = cmd.CombinedOutput()
-
-	// Ensure there is no error when running the command
-	if err != nil {
-		t.Fatalf("Error running complyctl scan: %v\nOutput: %s", err, string(output))
-	}
-	// Check if the output contains expected text
-	outputStr = string(output)
-	assert.True(t, strings.Contains(outputStr, "The assessment results in JSON were successfully written to complytime/assessment-results.json"))
-	assert.True(t, strings.Contains(outputStr, "No assessment result in markdown will be generated"))
+	out := runComplytime(t, binary, workDir, env,
+		"list", "--policy-id", "cis-benchmark")
+	t.Log(out)
+	assert.Contains(t, out, "cis-benchmark")
+	assert.NotContains(t, out, "nist-800-53-r5",
+		"filter must exclude non-matching policies")
 }

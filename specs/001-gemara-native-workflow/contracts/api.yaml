@@ -1,0 +1,388 @@
+openapi: 3.0.3
+info:
+    title: CompyBeacon OCI Registry
+    description: |
+        An OCI-compliant registry and enrichment service for Gemara compliance content.
+    version: 0.1.0
+
+paths:
+    /v2/:
+        get:
+            summary: OCI API Version Check
+            description: The 'handshake' endpoint to confirm OCI compliance.
+            security: []
+            responses:
+                '200':
+                    description: Registry implements V2 API.
+                    headers:
+                        Docker-Distribution-API-Version:
+                            schema:
+                                type: string
+                                example: "registry/2.0"
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                example: {}
+                '401':
+                    description: Authentication required. Client should follow WWW-Authenticate header.
+                    headers:
+                        WWW-Authenticate:
+                            schema:
+                                type: string
+                        Docker-Distribution-API-Version:
+                            schema:
+                                type: string
+                                example: "registry/2.0"
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+                '404':
+                    description: Registry does not implement V2 API.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+
+    /v2/_catalog:
+        get:
+            summary: List all repositories
+            security: []
+            parameters:
+                - name: n
+                  in: query
+                  required: false
+                  schema:
+                      type: integer
+                  description: Limit the number of results (pagination).
+                - name: last
+                  in: query
+                  required: false
+                  schema:
+                      type: string
+                  description: Last repository from previous page (pagination cursor).
+            responses:
+                '200':
+                    description: A list of all policy, catalog, and guidance IDs.
+                    headers:
+                        Link:
+                            schema:
+                                type: string
+                            description: RFC5988 Link header for pagination (present when more results available).
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    repositories:
+                                        type: array
+                                        items:
+                                            type: string
+                                example:
+                                    repositories: ["policies/rhel11", "catalogs/pci-dss", "guidance/nist"]
+                '401':
+                    description: Authentication required.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+
+    /v2/{name}/tags/list:
+        get:
+            summary: List all tags for a specific repository
+            security: []
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                  description: The full repository path (e.g., policies/rhel11-stig).
+            responses:
+                '200':
+                    description: A list of version tags.
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    name:
+                                        type: string
+                                    tags:
+                                        type: array
+                                        items:
+                                            type: string
+                                example:
+                                    name: "policies/rhel11-stig"
+                                    tags: ["v1.0.0", "v1.1.0", "latest"]
+                '401':
+                    description: Authentication required.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+                '404':
+                    description: Repository name not known to registry.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+
+    /v2/{name}/manifests/{reference}:
+        get:
+            summary: Get artifact manifest
+            security: []
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                - name: reference
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                  description: Can be a tag (v1.0) or a digest (sha256:...).
+            responses:
+                '200':
+                    description: OCI-compliant artifact manifest for Gemara policy content.
+                    headers:
+                        Docker-Content-Digest:
+                            schema:
+                                type: string
+                            description: Digest of the target manifest.
+                    content:
+                        application/vnd.gemara.policy.v1+json:
+                            schema:
+                                type: object
+                                description: OCI image manifest per OCI Distribution Spec with Gemara-specific media type.
+                '401':
+                    description: Authentication required.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+                '404':
+                    description: Manifest not found for the given name and reference.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OciErrors'
+
+    /v1/enrich:
+        post:
+            summary: Enrich telemetry attributes with compliance control data
+            description: |
+                Accepts a policy engine name and rule ID, and returns compliance-related attributes
+                (control mappings, frameworks, risk assessment) based on internal domain logic.
+                This endpoint is intended to be called by an OpenTelemetry Collector's custom processor.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnrichmentRequest'
+            responses:
+                '200':
+                    description: Successfully enriched attributes
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnrichmentResponse'
+                default:
+                    description: Unexpected error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+
+security:
+    - BearerAuth: []
+
+components:
+    securitySchemes:
+        BearerAuth:
+            type: http
+            scheme: bearer
+            description: Static shared secret between OpenTelemetry Collector and CompyBeacon service.
+
+    schemas:
+        EnrichmentRequest:
+            type: object
+            description: Request payload for telemetry attribute enrichment
+            properties:
+                policy:
+                    $ref: '#/components/schemas/Policy'
+            required:
+                - policy
+
+        EnrichmentResponse:
+            type: object
+            description: Complete compliance metadata including control mappings, frameworks, risk assessment.
+            properties:
+                compliance:
+                    $ref: '#/components/schemas/Compliance'
+            required:
+                - compliance
+            example:
+                compliance:
+                    control:
+                        id: "OSPS-QA-07.01"
+                        category: "Access Control"
+                        catalogId: "OSPS-B"
+                        applicability: ["Production", "Staging"]
+                        remediationDescription: "Remove root user access and implement proper IAM policies"
+                    frameworks:
+                        frameworks: ["NIST-800-53", "SOC-2"]
+                        requirements: ["AC-1", "CC6.1"]
+                    risk:
+                        level: "High"
+                    enrichmentStatus: "Success"
+
+        Policy:
+            type: object
+            description: Complete evidence log from policy engines and compliance assessment tools
+            properties:
+                policyEngineName:
+                    type: string
+                    description: Name of the policy engine that performed the evaluation or enforcement action
+                    example: "OPA"
+                policyRuleId:
+                    type: string
+                    description: Unique identifier for the policy rule being evaluated or enforced
+                    example: "deny-root-user"
+            required:
+                - policyEngineName
+                - policyRuleId
+
+        Compliance:
+            type: object
+            description: |
+                Compliance details from OCSF Security Control Profile.
+                Fields `control`, `frameworks`, and `risk` are only populated when
+                `enrichmentStatus` is `Success` or `Partial`.
+            properties:
+                control:
+                    $ref: '#/components/schemas/ComplianceControl'
+                frameworks:
+                    $ref: '#/components/schemas/ComplianceFrameworks'
+                risk:
+                    $ref: '#/components/schemas/ComplianceRisk'
+                enrichmentStatus:
+                    type: string
+                    description: Status of the compliance enrichment process. Clients should check this field first before accessing control/frameworks.
+                    enum: ["Success", "Unmapped", "Partial", "Unknown", "Skipped"]
+                    example: "Success"
+            required:
+                - enrichmentStatus
+
+        ComplianceControl:
+            type: object
+            description: Security control information for compliance assessment
+            properties:
+                id:
+                    type: string
+                    description: Unique identifier for the security control being assessed
+                    example: "OSPS-QA-07.01"
+                category:
+                    type: string
+                    description: Category or family that the security control belongs to
+                    example: "Access Control"
+                catalogId:
+                    type: string
+                    description: Unique identifier for the security control catalog or framework
+                    example: "OSPS-B"
+                applicability:
+                    type: array
+                    items:
+                        type: string
+                    description: Environments or contexts where this control applies
+                    example: ["Production", "Staging"]
+                remediationDescription:
+                    type: string
+                    description: Description of the recommended remediation strategy for this control
+                    example: "Remove root user access and implement proper IAM policies"
+            required:
+                - id
+                - catalogId
+                - category
+
+        ComplianceFrameworks:
+            type: object
+            description: Compliance framework and requirement information
+            properties:
+                frameworks:
+                    type: array
+                    items:
+                        type: string
+                    description: Regulatory or industry standards being evaluated for compliance
+                    example: ["NIST-800-53", "SOC-2"]
+                requirements:
+                    type: array
+                    items:
+                        type: string
+                    description: Compliance requirement identifiers from the frameworks being evaluated
+                    example: ["AC-1", "CC6.1"]
+            required:
+                - frameworks
+                - requirements
+
+        ComplianceRisk:
+            type: object
+            description: Compliance risk assessment information
+            properties:
+                level:
+                    type: string
+                    enum: ["Critical", "High", "Medium", "Low", "Informational"]
+                    description: Risk level associated with non-compliance
+                    example: "High"
+            required:
+                - level
+
+        OciErrors:
+            type: object
+            description: OCI Distribution Spec compliant error response.
+            properties:
+                errors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OciError'
+            required:
+                - errors
+
+        OciError:
+            type: object
+            description: Individual OCI error entry per OCI Distribution Spec.
+            properties:
+                code:
+                    type: string
+                    description: Unique error identifier (e.g., NAME_UNKNOWN, MANIFEST_UNKNOWN, UNAUTHORIZED).
+                    example: "NAME_UNKNOWN"
+                message:
+                    type: string
+                    description: Human-readable error message.
+                    example: "repository name not known to registry"
+                detail:
+                    type: object
+                    description: Arbitrary additional context about the error.
+            required:
+                - code
+                - message
+
+        Error:
+            type: object
+            description: Error response for non-OCI endpoints (e.g., /v1/enrich).
+            required:
+                - code
+                - message
+            properties:
+                code:
+                    type: integer
+                    format: int32
+                    description: HTTP status code
+                    example: 400
+                message:
+                    type: string
+                    description: Error message

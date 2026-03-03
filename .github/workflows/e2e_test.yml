@@ -1,39 +1,31 @@
 name: e2e-test
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    types:
-      - opened
-      - synchronize
+    push:
+        branches:
+            - main
+    pull_request:
+        types:
+            - opened
+            - synchronize
 
 permissions:
-  contents: read
-
-env:
-  COMPLYTIME_DEV_MODE: 1
+    contents: read
 
 jobs:
-  e2e-test:
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
-    steps:
-      # Checkout the code from the repository
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    e2e-test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Build and setup complyctl
-      - name: Setup compyctl
-        uses: ./.github/actions/setup-complyctl
-        # This is the test data for a specific product, and it may be updated in the future if necessary.
-        with:
-          product: 'fedora'
-          catalog: 'cusp_fedora'
-          profile: 'fedora-cusp_fedora-default'
+            - name: Set up Go
+              uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+              with:
+                  go-version-file: './go.mod'
 
-      # Run e2e tests
-      - name: Run e2e tests
-        run: go test tests/e2e/e2e_test.go -v
+            - name: Build binaries
+              run: make build build-test-plugin
+
+            - name: Run e2e tests
+              run: go test -tags=e2e -mod=vendor ./tests/e2e/... -v -count=1 -timeout 120s

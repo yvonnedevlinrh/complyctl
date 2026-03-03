@@ -1,0 +1,9 @@
+policies:
+  - url: http://localhost:8765/policies/cis-fedora-l1-workstation
+    id: cis-fedora
+targets:
+  - id: local
+    policies:
+      - cis-fedora
+    variables:
+      profile: cis_workstation_l1

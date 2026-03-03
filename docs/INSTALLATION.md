@@ -2,33 +2,45 @@
 
 ## Binary
 
-- The latest binary release can be downloaded from <https://github.com/complytime/complyctl/releases/latest>.
-- The release signature can be verified with:
-  ```
-  cosign verify-blob --certificate complyctl_*_checksums.txt.pem --signature complyctl_*_checksums.txt.sig complytime_*_checksums.txt --certificate-oidc-issuer=https://token.actions.githubusercontent.com --certificate-identity=https://github.com/complytime/complyctl/.github/workflows/release.yml@refs/heads/main
-  ```
+The latest binary release can be downloaded from <https://github.com/complytime/complyctl/releases/latest>.
 
+Verify the release signature:
+
+```bash
+cosign verify-blob \
+  --certificate complyctl_*_checksums.txt.pem \
+  --signature complyctl_*_checksums.txt.sig \
+  complyctl_*_checksums.txt \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity=https://github.com/complytime/complyctl/.github/workflows/release.yml@refs/heads/main
+```
 
 ## From Source
 
 ### Prerequisites
 
-- **Go** version 1.20 or higher
-- **Make** (optional, for using the `Makefile` if included)
-- **pandoc** (optional, for generating man pages using the `make man`)
+- **Go** 1.24+
+- **Make**
+- **buf** CLI (optional, for protobuf regeneration)
 
-### Clone the repository
+### Clone and build
 
 ```bash
 git clone https://github.com/complytime/complyctl.git
 cd complyctl
-```
-
-### Build Instructions
-To compile complyctl and openscap-plugin:
-
-```bash
 make build
 ```
 
-The binaries can be found in the `bin/` directory in the local repo. Add it to your PATH and you are all set!
+Binaries are placed in `bin/`. Add it to your `PATH`:
+
+```bash
+export PATH="$PWD/bin:$PATH"
+```
+
+### Build the test plugin (optional)
+
+```bash
+make build-test-plugin
+```
+
+Produces `bin/complyctl-provider-test` for use in E2E testing. See [E2E_INTEGRATION.md](E2E_INTEGRATION.md).

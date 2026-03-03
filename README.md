@@ -3,139 +3,195 @@
 [![OpenSSF Best Practices status](https://www.bestpractices.dev/projects/9761/badge)](https://www.bestpractices.dev/projects/9761)
 [![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/complytime/complyctl)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/complytime/complyctl/badge)](https://scorecard.dev/viewer/?uri=github.com/complyctl/complyctl)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=rh-psce_complyctl&metric=coverage)](https://sonarcloud.io/summary/new_code?id=rh-psce_complyctl)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rh-psce_complyctl&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rh-psce_complyctl)
 
-ComplyCTL leverages [OSCAL](https://github.com/usnistgov/OSCAL/) to perform compliance assessment activities, using plugins for each stage of the lifecycle.
+A lightweight compliance runtime that pulls [Gemara](https://gemara.openssf.org/) policies from an OCI registry and executes scans via plugins.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Host                                                            │
+│                                                                  │
+│  ┌──────────────┐      complyctl get   ┌───────────────────────┐ │
+│  │ OCI Registry │ ◄──────────────────  │                       │ │
+│  │              │  ───────────────────►│    complyctl CLI      │ │
+│  │  Gemara      │   catalog + policy   │                       │ │
+│  │  policies    │   layers (YAML)      │ init / get / list     │ │
+│  └──────────────┘                      │ generate / scan       │ │
+│                                        │ doctor / providers    │ │
+│                                        │ version               │ │
+│                                        └─────┬────────┬────────┘ │
+│                                              │        │          │
+│                                 ┌────────────┘        │          │
+│                                 │                     │          │
+│                                 ▼                     ▼          │
+│                       ┌──────────────┐    ┌────────────────┐     │
+│                       │    Cache     │    │   Providers    │     │
+│                       │              │    │                │     │
+│                       │ ~/.complytime│    │ ~/.complytime/ │     │
+│                       │  /policies/  │    │  providers/    │     │
+│                       │  state.json  │    │                │     │
+│                       │              │    │ complyctl-     │     │
+│                       │ OCI Layout   │    │  provider-*    │     │
+│                       │ per policy   │    │                │     │
+│                       └──────────────┘    │ gRPC: Describe │     │
+│                                           │ Generate, Scan │     │
+│  ┌──────────────┐                         └────────────────┘     │
+│  │  Workspace   │                                                │
+│  │              │  complytime.yaml defines:                      │
+│  │ ./complytime │   - registry URL                               │
+│  │   .yaml      │   - policy IDs + versions                      │
+│  │              │   - targets + variables                        │
+│  │ ./.comply-   │                                                │
+│  │   time/scan/ │                                                │
+│  │  (output)    │  Scan output (EvaluationLog, OSCAL,            │
+│  └──────────────┘   SARIF, Markdown) written to workspace        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Components:**
+
+| Component | Description |
+|:---|:---|
+| **OCI Registry** | Remote store for Gemara policies. Each policy is a multi-layer OCI manifest containing catalog, guidance, and policy/assessment YAML layers distinguished by media type. |
+| **Workspace** | Current directory containing `complytime.yaml`. Defines which registry, policies, and targets to use. Scan output lands in `./.complytime/scan/`. |
+| **Cache** | Local OCI Layout stores under `~/.complytime/policies/`. One store per policy ID. `state.json` tracks digests for incremental sync. |
+| **Providers** | Standalone executables in `~/.complytime/providers/` matching the `complyctl-provider-*` naming convention. Communicate via gRPC (`Describe`, `Generate`, `Scan`). Evaluator ID derived from filename. |
+| **CLI** | Orchestrates the workflow: fetch policies, resolve dependency graphs, dispatch to plugins, produce compliance reports. |
 
 ## Documentation
 
-:paperclip: [Installation](./docs/INSTALLATION.md)\
-:paperclip: [Quick Start](./docs/QUICK_START.md)\
-:paperclip: [Sample Component Definition](./docs/samples/sample-component-definition.json)
+- [Installation](./docs/INSTALLATION.md)
+- [Quick Start](./docs/QUICK_START.md)
+- [Plugin Guide](./docs/PLUGIN_GUIDE.md)
+- [E2E Testing](./tests/e2e/README.md)
 
-### Basic Usage
+## CLI Commands
 
-Determine the baseline you want to run a scan for and create an OSCAL [Assessment Plan](https://pages.nist.gov/OSCAL/learn/concepts/layer/assessment/assessment-plan/). The Assessment
-Plan will act as configuration to guide the complyctl generation and scanning operations.
+| Command | Description |
+|:---|:---|
+| `init` | Create a workspace configuration file |
+| `get` | Fetch new/modified policies from OCI registry and update cache |
+| `list` | List cached Gemara policies |
+| `generate` | Generate policy graph and invoke plugins |
+| `scan` | Scan targets and produce compliance reports |
+| `doctor` | Run pre-flight diagnostics on the workspace |
+| `providers` | List discovered scanning providers and their health status |
+| `version` | Print version |
 
-### `list` command
+Global flag: `--debug` / `-d` — output debug logs.
+
+### `init`
+
+```bash
+complyctl init
+```
+
+Creates a workspace configuration file (`complytime.yaml`). When one already exists, validates and runs `get` automatically.
+
+### `get`
+
+```bash
+complyctl get
+```
+
+Performs incremental sync from the OCI registry defined in `complytime.yaml`. Only downloads new or modified content. Uses Docker credential helpers for authentication — if `docker login` works, `complyctl get` works.
+
+### `list`
 
 ```bash
 complyctl list
-...
-# Table appears with options. Look at the Framework ID column.
+complyctl list --policy-id nist-800-53-r5
 ```
 
-### `info` command
+| Flag | Description |
+|:---|:---|
+| `--policy-id` | Filter output to a single policy |
+
+### `generate`
 
 ```bash
-complyctl info <framework-id>
-# Display information about a framework's controls and rules.
-
-complyctl info <framework-id> --control <control-id>
-# Display details about a specific control.
-
-complyctl info <framework-id> --rule <rule-id>
-# Display details about a specific rule.
-
-complyctl info <framework-id> --parameter <parameter-id>
-# Display details about a specific parameter.
+complyctl generate --policy-id nist-800-53-r5
 ```
 
-### `plan` command
+| Flag | Short | Description |
+|:---|:---|:---|
+| `--policy-id` | `-p` | Policy ID to generate (required) |
+
+Resolves the policy dependency graph from cache, extracts assessment configurations, applies parameter overrides from `complytime.yaml`, and dispatches to the matching plugin via Generate RPC.
+
+### `scan`
 
 ```bash
-complyctl plan <framework-id>
-...
-# The file will be written out to assessment-plan.json in the specified workspace.
-# Defaults to current working directory.
+# Default: EvaluationLog only
+complyctl scan --policy-id nist-800-53-r5
 
-cat complytime/assessment-plan.json
-# The default assessment-plan.json will be available in the complytime workspace (complytime/assessment-plan.json).
+# OSCAL assessment-results
+complyctl scan --policy-id nist-800-53-r5 --format oscal
 
-complyctl plan <framework-id> --dry-run
-# See the default contents of the assessment-plan.json.
+# Markdown report
+complyctl scan --policy-id nist-800-53-r5 --format pretty
+
+# SARIF for security tooling
+complyctl scan --policy-id nist-800-53-r5 --format sarif
 ```
 
-Use a scope config file to customize the assessment plan:
+| Flag | Short | Description |
+|:---|:---|:---|
+| `--policy-id` | `-p` | Policy ID to scan (required) |
+| `--format` | `-f` | Output format: `oscal`, `pretty`, `sarif` |
+
+Output written to `./.complytime/scan/`.
+
+### `doctor`
 
 ```bash
-complyctl plan <framework-id> --dry-run --out config.yml
-# Customize the assessment-plan.json with the 'out' flag. Updates can be made to the config.yml.
+complyctl doctor
+complyctl doctor --verbose
 ```
 
-Open the `config.yml` file in a text editor and modify the YAML as desired.  The example below shows various options for including and excluding rules.
+Validates workspace configuration, plugin health, cache integrity, and provider variable requirements. Use `--verbose` for per-provider variable detail.
 
-The `selectParameters` YAML key sets parameters for the `controlId`. If you try to use a value that isn't supported, an error will occur, and the valid alternative values will be displayed. To fix this, update the `value` in the `config.yml` file, and then run the command with the `--scope-config <config.yml>` flag. This will generate a new `assessment-plan.json` file with the updated values.
+### `providers`
+
+```bash
+complyctl providers
+```
+
+Lists discovered scanning providers with their evaluator ID, path, health status, and version.
+
+## Workspace Configuration
 
 ```yaml
-frameworkId: example-framework
-includeControls:
-- controlId: control-01
-  controlTitle: Title of Control 01
-  includeRules:
-  - "*" # all rules included by default
-  selectParameters:
-  - name: param-1-id
-    value: param-1-value
-  - name: param-2-id
-    value: param-2-value  
-- controlId: control-02
-  controlTitle: Title of Control 02
-  includeRules:
-  - "rule-02" # only rule-02 will be included for this control
-  waiveRules:
-    - "rule-01" # rule-01 will be waived for this control
-- controlId: control-03
-  controlTitle: Title of Control 03
-  includeRules:
-  - "*"
-  selectParameters:
-  - name: param-1-id
-    value: param-1-value
-  - name: param-5-id
-    value: param-5-value # update the value with available alternatives
-  excludeRules:
-  - "rule-03" # exclude rule-03 specific rule from control-03
-globalExcludeRules:
-  - "rule-99" # will be excluded for all controls, this takes priority over any includeRules, waiveRules, and globalWaiveRules clauses above
-globalWaiveRules:
-  - "rule-50" # will be waived for all controls, this takes priority over any includeRules clauses above
+# complytime.yaml
+policies:
+  - url: registry.example.com/policies/nist-800-53-r5@v1.0.0
+    id: nist
+  - url: registry.example.com/policies/cis-benchmark
+variables:
+  output_dir: /tmp/scan-results
+targets:
+  - id: production-cluster
+    policies:
+      - nist
+    variables:
+      kubeconfig: /path/to/kubeconfig
+      api_token: ${MY_API_TOKEN}
 ```
 
-The edited `config.yml` can then be used with the `plan` command to customize the assessment plan.
-
-```bash
-complyctl plan <framework-id> --scope-config config.yml
-# The config.yml will be loaded by passing '--scope-config' to customize the assessment-plan.json.
-```
-
-### `generate` command
-
-```bash
-complyctl generate
-# Run the `generate` command to generate the plugin specific policy artifacts in the workspace.
-```
-
-### `scan` command
-
-```bash
-complyctl scan
-# Run the `scan` command to execute the PVP plugins and create results artifacts. The results will be written to assessment-results.json in the specified workspace.
-
-complyctl scan --with-md
-# Results can also be created in Markdown format by passing the `--with-md` flag.
-```
-
-## Plugin Interaction
-
-<img alt="plugin-interaction" src="https://raw.githubusercontent.com/complytime/complyctl/0c38ebe6962e5c8479c18db219f37ca783108c97/graph-plugin-interaction.png" height="500" width="1000">
+| Field | Description |
+|:---|:---|
+| `policies[].url` | Full OCI reference (registry + repository + optional `@version`) |
+| `policies[].id` | Optional shortname; if omitted, derived from last path segment of URL |
+| `variables` | Workspace-scoped constants passed to plugins via Generate RPC |
+| `targets[].id` | Scan target identifier |
+| `targets[].policies` | List of effective policy IDs to evaluate against this target |
+| `targets[].variables` | Plugin-specific key-value pairs; supports `${VAR}` env substitution |
 
 ## Contributing
 
-:paperclip: Read the [contributing guidelines](./docs/CONTRIBUTING.md)\
-:paperclip: Read the [style guide](./docs/STYLE_GUIDE.md)\
-:paperclip: Read and agree to the [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
+- [Contributing Guidelines](./docs/CONTRIBUTING.md)
+- [Style Guide](./docs/STYLE_GUIDE.md)
+- [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
 
-*Interested in writing a plugin?* See the [plugin guide](./docs/PLUGIN_GUIDE.md).
+*Interested in writing a plugin?* See the [Plugin Guide](./docs/PLUGIN_GUIDE.md).

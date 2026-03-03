@@ -3,6 +3,7 @@
 package scan
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -11,40 +12,38 @@ import (
 	"github.com/complytime/complyctl/cmd/openscap-plugin/xccdf"
 )
 
-func validateOpenSCAPFiles(cfg *config.Config) (map[string]string, error) {
-	if _, err := os.Stat(cfg.Files.Policy); err != nil {
+func validateOpenSCAPFiles(policyPath, datastreamPath string) (map[string]string, error) {
+	if _, err := os.Stat(policyPath); err != nil {
 		return nil, err
 	}
 
-	isXML, err := config.IsXMLFile(cfg.Files.Policy)
+	isXML, err := config.IsXMLFile(policyPath)
 	if err != nil || !isXML {
 		return nil, err
 	}
 
 	return map[string]string{
-		"datastream": cfg.Files.Datastream,
-		"policy":     cfg.Files.Policy,
-		"results":    cfg.Files.Results,
-		"arf":        cfg.Files.ARF,
+		"datastream": datastreamPath,
+		"policy":     policyPath,
+		"results":    config.ResultsPath,
+		"arf":        config.ARFPath,
 	}, nil
 }
 
-func ScanSystem(cfg *config.Config, profile string) ([]byte, error) {
-	openscapFiles, err := validateOpenSCAPFiles(cfg)
+// ScanSystem runs an OpenSCAP evaluation using the convention-based file
+// paths and the provided datastream + profile.
+func ScanSystem(ctx context.Context, datastreamPath, profile string) ([]byte, error) {
+	openscapFiles, err := validateOpenSCAPFiles(config.PolicyPath, datastreamPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("absent openscap files: %w\n\nDid you run the generate command?", err)
-		} else {
-			return nil, fmt.Errorf("invalid openscap files: %w", err)
 		}
+		return nil, fmt.Errorf("invalid openscap files: %w", err)
 	}
 
 	tailoringProfile := fmt.Sprintf("%s_%s", profile, xccdf.XCCDFTailoringSuffix)
-	// In the future, we can add an integrity check to confirm if the expected tailoring profile
-	// id exists in the tailoring file. It is not a common case but a guardrail to prevent manual
-	// manipulation of the tailoring file would be good.
 
-	output, err := oscap.OscapScan(openscapFiles, tailoringProfile)
+	output, err := oscap.OscapScan(ctx, openscapFiles, tailoringProfile)
 	if err != nil {
 		return output, fmt.Errorf("failed during scan: %w", err)
 	}

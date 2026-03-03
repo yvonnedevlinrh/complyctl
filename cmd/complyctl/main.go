@@ -16,7 +16,8 @@ func main() {
 	defer cancel()
 	complyctl := cli.New()
 	if err := complyctl.ExecuteContext(ctx); err != nil {
-		cli.Error(fmt.Sprintf("error running complyctl: %v", err))
+		cli.Error(fmt.Sprintf("error running complytime: %v", err))
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
