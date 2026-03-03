@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 const (
@@ -55,23 +55,24 @@ func LoadGranularPolicies(dir string) (map[string]*AmpelPolicy, error) {
 	return policies, nil
 }
 
-// MatchPolicies looks up each OSCAL rule ID in the granular policy map.
-// It returns the matched policies and warning strings for unmatched rules.
-func MatchPolicies(oscalPolicy policy.Policy, granular map[string]*AmpelPolicy) ([]*AmpelPolicy, []string) {
+// MatchPolicies looks up each requirement ID from the assessment configurations
+// in the granular policy map. It returns the matched policies and warning
+// strings for unmatched requirements.
+func MatchPolicies(configs []plugin.AssessmentConfiguration, granular map[string]*AmpelPolicy) ([]*AmpelPolicy, []string) {
 	var matched []*AmpelPolicy
 	var warnings []string
 	seen := make(map[string]bool)
 
-	for _, ruleSet := range oscalPolicy {
-		ruleID := ruleSet.Rule.ID
-		if seen[ruleID] {
+	for _, config := range configs {
+		reqID := config.RequirementID
+		if seen[reqID] {
 			continue
 		}
-		seen[ruleID] = true
+		seen[reqID] = true
 
-		p, ok := granular[ruleID]
+		p, ok := granular[reqID]
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("no granular policy found for rule %q", ruleID))
+			warnings = append(warnings, fmt.Sprintf("no granular policy found for requirement %q", reqID))
 			continue
 		}
 		matched = append(matched, p)

@@ -11,7 +11,7 @@ import (
 
 	"github.com/complytime/complyctl/cmd/ampel-plugin/intoto"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/targets"
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 const maxFieldSize = 10 * 1024 // 10KB per field
@@ -188,101 +188,93 @@ func WritePerRepoResult(result *PerRepoResult, dir string) error {
 	return nil
 }
 
-// ToPVPResult maps a slice of PerRepoResults to a policy.PVPResult.
-// Findings with the same CheckID are grouped into a single ObservationByCheck
-// with multiple Subjects (one per repository). This matches the OSCAL pattern
-// and prevents last-write-wins overwrites in the downstream observation manager.
-func ToPVPResult(repoResults []*PerRepoResult) policy.PVPResult {
-	type checkGroup struct {
-		title     string
-		checkID   string
-		subjects  []policy.Subject
-		collected time.Time
+// ToScanResponse maps a slice of PerRepoResults to a plugin.ScanResponse.
+// Findings are grouped by requirement ID (derived from TenetID) into
+// AssessmentLog entries. Each repository/branch scan becomes a Step within
+// the assessment.
+func ToScanResponse(repoResults []*PerRepoResult) *plugin.ScanResponse {
+	type reqGroup struct {
+		requirementID string
+		steps         []plugin.Step
+		passCount     int
+		totalCount    int
 	}
 
-	groups := make(map[string]*checkGroup)
+	groups := make(map[string]*reqGroup)
 	var order []string // track insertion order for deterministic output
 
 	for _, rr := range repoResults {
+		repoName := targets.RepoDisplayName(rr.Repository)
+		stepName := repoName + "@" + rr.Branch
+
 		for _, f := range rr.Findings {
-			g, ok := groups[f.TenetID]
+			// Derive requirement ID from TenetID by stripping "check-" prefix
+			reqID := strings.TrimPrefix(f.TenetID, "check-")
+
+			g, ok := groups[reqID]
 			if !ok {
-				g = &checkGroup{
-					title:     f.Title,
-					checkID:   f.TenetID,
-					collected: rr.ScannedAt,
-				}
-				groups[f.TenetID] = g
-				order = append(order, f.TenetID)
+				g = &reqGroup{requirementID: reqID}
+				groups[reqID] = g
+				order = append(order, reqID)
 			}
-			g.subjects = append(g.subjects, policy.Subject{
-				Title:       targets.RepoDisplayName(rr.Repository),
-				Type:        "inventory-item",
-				ResourceID:  rr.Repository,
-				Result:      mapResult(f.Result, rr.Status),
-				EvaluatedOn: rr.ScannedAt,
-				Reason:      f.Reason,
+
+			result := mapResult(f.Result, rr.Status)
+			g.steps = append(g.steps, plugin.Step{
+				Name:    stepName,
+				Result:  result,
+				Message: f.Reason,
 			})
-			if rr.ScannedAt.After(g.collected) {
-				g.collected = rr.ScannedAt
+			g.totalCount++
+			if result == plugin.ResultPassed {
+				g.passCount++
 			}
 		}
 
-		// For error status with no findings, add an error subject
+		// For error status with no findings, add an error step
 		if rr.Status == "error" && len(rr.Findings) == 0 {
-			const errorCheckID = "scan-error"
-			g, ok := groups[errorCheckID]
+			const errorReqID = "scan-error"
+			g, ok := groups[errorReqID]
 			if !ok {
-				g = &checkGroup{
-					title:     "Scan Error",
-					checkID:   errorCheckID,
-					collected: rr.ScannedAt,
-				}
-				groups[errorCheckID] = g
-				order = append(order, errorCheckID)
+				g = &reqGroup{requirementID: errorReqID}
+				groups[errorReqID] = g
+				order = append(order, errorReqID)
 			}
-			g.subjects = append(g.subjects, policy.Subject{
-				Title:       targets.RepoDisplayName(rr.Repository),
-				Type:        "inventory-item",
-				ResourceID:  rr.Repository,
-				Result:      policy.ResultError,
-				EvaluatedOn: rr.ScannedAt,
-				Reason:      rr.Error,
+			g.steps = append(g.steps, plugin.Step{
+				Name:    stepName,
+				Result:  plugin.ResultError,
+				Message: rr.Error,
 			})
-			if rr.ScannedAt.After(g.collected) {
-				g.collected = rr.ScannedAt
-			}
+			g.totalCount++
 		}
 	}
 
-	observations := make([]policy.ObservationByCheck, 0, len(groups))
-	for _, checkID := range order {
-		g := groups[checkID]
-		observations = append(observations, policy.ObservationByCheck{
-			Title:     g.title,
-			CheckID:   g.checkID,
-			Methods:   []string{"AUTOMATED"},
-			Subjects:  g.subjects,
-			Collected: g.collected,
+	assessments := make([]plugin.AssessmentLog, 0, len(groups))
+	for _, reqID := range order {
+		g := groups[reqID]
+		assessments = append(assessments, plugin.AssessmentLog{
+			RequirementID: g.requirementID,
+			Steps:         g.steps,
+			Message:       fmt.Sprintf("%d of %d repositories passed", g.passCount, g.totalCount),
+			Confidence:    plugin.ConfidenceLevelHigh,
 		})
 	}
 
-	return policy.PVPResult{
-		ObservationsByCheck: observations,
-	}
+	return &plugin.ScanResponse{Assessments: assessments}
 }
 
-func mapResult(findingResult, repoStatus string) policy.Result {
+func mapResult(findingResult, repoStatus string) plugin.Result {
 	if repoStatus == "error" {
-		return policy.ResultError
+		return plugin.ResultError
 	}
 	switch findingResult {
 	case "pass":
-		return policy.ResultPass
+		return plugin.ResultPassed
 	case "fail":
-		return policy.ResultFail
+		return plugin.ResultFailed
+	case "skip":
+		return plugin.ResultSkipped
 	default:
-		return policy.ResultError
+		return plugin.ResultError
 	}
 }
 
@@ -303,4 +295,3 @@ func isPrintableASCII(s string) bool {
 	}
 	return true
 }
-

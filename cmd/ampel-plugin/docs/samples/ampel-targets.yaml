@@ -1,8 +1,16 @@
-repositories:
-  - url: https://github.com/complytime/complyctl
-    branches:
-      - main
-  - url: https://gitlab.com/complytime/org-infra
-    branches:
-      - main
-      - release
+targets:
+  github-repos:
+    repositories:
+      - url: https://github.com/complytime/complyctl
+        branches:
+          - main
+        specs:
+          - builtin:github/branch-rules.yaml
+  gitlab-repos:
+    repositories:
+      - url: https://gitlab.com/complytime/org-infra
+        branches:
+          - main
+          - release
+        specs:
+          - builtin:github/branch-rules.yaml

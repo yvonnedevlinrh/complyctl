@@ -87,7 +87,6 @@ func (m *mockRunner) Run(name string, args ...string) ([]byte, error) {
 	return nil, fmt.Errorf("unknown command: %s", name)
 }
 
-
 func TestConstructSnappyCommand(t *testing.T) {
 	args := constructSnappyCommand("myorg", "myrepo", "main", "/specs/github/branch-rules.yaml")
 	require.Equal(t, []string{
@@ -341,4 +340,3 @@ func TestScanRepository_InvalidAttestationHash(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "extracting subject hash")
 }
-

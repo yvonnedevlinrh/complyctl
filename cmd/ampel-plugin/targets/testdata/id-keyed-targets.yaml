@@ -1,0 +1,21 @@
+targets:
+  github-repos:
+    repositories:
+      - url: https://github.com/myorg/repo1
+        branches:
+          - main
+          - release
+        specs:
+          - builtin:github/branch-rules.yaml
+      - url: https://gitlab.com/myorg/repo2
+        branches:
+          - main
+        specs:
+          - builtin:github/branch-rules.yaml
+  internal-repos:
+    repositories:
+      - url: https://github.com/myorg/internal-app
+        branches:
+          - main
+        specs:
+          - builtin:github/branch-rules.yaml

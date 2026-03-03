@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
 	"github.com/stretchr/testify/require"
+
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 func loadFixture(t *testing.T, path string) []byte {
@@ -222,14 +223,14 @@ func TestWritePerRepoResult_Overwrites(t *testing.T) {
 	require.Contains(t, string(data), `"fail"`)
 }
 
-func TestToPVPResult(t *testing.T) {
-	results := []*PerRepoResult{
+func TestToScanResponse(t *testing.T) {
+	repoResults := []*PerRepoResult{
 		{
 			Repository: "https://github.com/myorg/repo1",
 			Branch:     "main",
 			Status:     "pass",
 			Findings: []Finding{
-				{TenetID: "check-1", Title: "Check 1", Result: "pass", Reason: "OK"},
+				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "pass", Reason: "OK"},
 			},
 		},
 		{
@@ -237,40 +238,41 @@ func TestToPVPResult(t *testing.T) {
 			Branch:     "main",
 			Status:     "fail",
 			Findings: []Finding{
-				{TenetID: "check-1", Title: "Check 1", Result: "fail", Reason: "Not configured"},
+				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "fail", Reason: "Not configured"},
 			},
 		},
 	}
 
-	pvp := ToPVPResult(results)
-	// Same CheckID → grouped into one observation with two subjects
-	require.Len(t, pvp.ObservationsByCheck, 1)
-	obs := pvp.ObservationsByCheck[0]
-	require.Equal(t, "check-1", obs.CheckID)
-	require.Len(t, obs.Subjects, 2)
+	resp := ToScanResponse(repoResults)
+	// Same requirement ID → grouped into one assessment with two steps
+	require.Len(t, resp.Assessments, 1)
+	assessment := resp.Assessments[0]
+	require.Equal(t, "SC-CODE-01.01", assessment.RequirementID)
+	require.Len(t, assessment.Steps, 2)
+	require.Equal(t, plugin.ConfidenceLevelHigh, assessment.Confidence)
 
-	// Sort by ResourceID for deterministic assertions
-	subjects := obs.Subjects
-	sort.Slice(subjects, func(i, j int) bool {
-		return subjects[i].ResourceID < subjects[j].ResourceID
+	// Sort by Name for deterministic assertions
+	steps := assessment.Steps
+	sort.Slice(steps, func(i, j int) bool {
+		return steps[i].Name < steps[j].Name
 	})
 
-	require.Equal(t, "https://github.com/myorg/repo1", subjects[0].ResourceID)
-	require.Equal(t, policy.ResultPass, subjects[0].Result)
+	require.Equal(t, "myorg/repo1@main", steps[0].Name)
+	require.Equal(t, plugin.ResultPassed, steps[0].Result)
 
-	require.Equal(t, "https://gitlab.com/myorg/repo2", subjects[1].ResourceID)
-	require.Equal(t, policy.ResultFail, subjects[1].Result)
+	require.Equal(t, "myorg/repo2@main", steps[1].Name)
+	require.Equal(t, plugin.ResultFailed, steps[1].Result)
 }
 
-func TestToPVPResult_MultipleChecks(t *testing.T) {
-	results := []*PerRepoResult{
+func TestToScanResponse_MultipleChecks(t *testing.T) {
+	repoResults := []*PerRepoResult{
 		{
 			Repository: "https://github.com/myorg/repo1",
 			Branch:     "main",
 			Status:     "pass",
 			Findings: []Finding{
-				{TenetID: "check-1", Title: "Check 1", Result: "pass", Reason: "OK"},
-				{TenetID: "check-2", Title: "Check 2", Result: "pass", Reason: "OK"},
+				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "pass", Reason: "OK"},
+				{TenetID: "check-SC-CODE-02.01", Title: "Check 2", Result: "pass", Reason: "OK"},
 			},
 		},
 		{
@@ -278,24 +280,24 @@ func TestToPVPResult_MultipleChecks(t *testing.T) {
 			Branch:     "main",
 			Status:     "fail",
 			Findings: []Finding{
-				{TenetID: "check-1", Title: "Check 1", Result: "fail", Reason: "Not configured"},
-				{TenetID: "check-2", Title: "Check 2", Result: "pass", Reason: "OK"},
+				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "fail", Reason: "Not configured"},
+				{TenetID: "check-SC-CODE-02.01", Title: "Check 2", Result: "pass", Reason: "OK"},
 			},
 		},
 	}
 
-	pvp := ToPVPResult(results)
-	// Two distinct CheckIDs → two observations
-	require.Len(t, pvp.ObservationsByCheck, 2)
+	resp := ToScanResponse(repoResults)
+	// Two distinct requirement IDs → two assessments
+	require.Len(t, resp.Assessments, 2)
 
-	// Each observation should have 2 subjects (one per repo)
-	for _, obs := range pvp.ObservationsByCheck {
-		require.Len(t, obs.Subjects, 2, "CheckID %s should have 2 subjects", obs.CheckID)
+	// Each assessment should have 2 steps (one per repo)
+	for _, a := range resp.Assessments {
+		require.Len(t, a.Steps, 2, "RequirementID %s should have 2 steps", a.RequirementID)
 	}
 }
 
-func TestToPVPResult_ErrorRepo(t *testing.T) {
-	results := []*PerRepoResult{
+func TestToScanResponse_ErrorRepo(t *testing.T) {
+	repoResults := []*PerRepoResult{
 		{
 			Repository: "https://github.com/myorg/repo1",
 			Branch:     "main",
@@ -304,8 +306,16 @@ func TestToPVPResult_ErrorRepo(t *testing.T) {
 		},
 	}
 
-	pvp := ToPVPResult(results)
-	require.Len(t, pvp.ObservationsByCheck, 1)
-	require.Equal(t, policy.ResultError, pvp.ObservationsByCheck[0].Subjects[0].Result)
-	require.Equal(t, "connection refused", pvp.ObservationsByCheck[0].Subjects[0].Reason)
+	resp := ToScanResponse(repoResults)
+	require.Len(t, resp.Assessments, 1)
+	require.Equal(t, plugin.ResultError, resp.Assessments[0].Steps[0].Result)
+	require.Equal(t, "connection refused", resp.Assessments[0].Steps[0].Message)
+}
+
+func TestMapResult(t *testing.T) {
+	require.Equal(t, plugin.ResultPassed, mapResult("pass", "pass"))
+	require.Equal(t, plugin.ResultFailed, mapResult("fail", "fail"))
+	require.Equal(t, plugin.ResultError, mapResult("pass", "error"))
+	require.Equal(t, plugin.ResultError, mapResult("unknown", "pass"))
+	require.Equal(t, plugin.ResultSkipped, mapResult("skip", "pass"))
 }

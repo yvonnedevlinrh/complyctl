@@ -227,4 +227,3 @@ func ScanRepository(repo targets.TargetRepository, branch, specPath string, cfg 
 
 	return &RawScanResult{Output: ampelOut}, nil
 }
-

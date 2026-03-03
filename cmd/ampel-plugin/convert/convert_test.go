@@ -6,18 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/oscal-compass/compliance-to-policy-go/v2/policy"
-	"github.com/oscal-compass/oscal-sdk-go/extensions"
 	"github.com/stretchr/testify/require"
+
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
-func loadPolicy(t *testing.T, path string) policy.Policy {
+func loadConfigurations(t *testing.T, path string) []plugin.AssessmentConfiguration {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	require.NoError(t, err, "reading fixture %s", path)
-	var ruleSets []extensions.RuleSet
-	require.NoError(t, json.Unmarshal(data, &ruleSets), "unmarshaling fixture %s", path)
-	return policy.Policy(ruleSets)
+	var configs []plugin.AssessmentConfiguration
+	require.NoError(t, json.Unmarshal(data, &configs), "unmarshaling fixture %s", path)
+	return configs
 }
 
 func loadExpectedBundle(t *testing.T, path string) *AmpelPolicyBundle {
@@ -121,7 +121,7 @@ func TestMatchPolicies(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	input := loadPolicy(t, "testdata/assessment-plan-full.json")
+	input := loadConfigurations(t, "testdata/assessment-plan-full.json")
 	matched, warnings := MatchPolicies(input, granular)
 
 	require.Len(t, matched, 5)
@@ -138,7 +138,7 @@ func TestMatchPolicies_Subset(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	input := loadPolicy(t, "testdata/assessment-plan-subset.json")
+	input := loadConfigurations(t, "testdata/assessment-plan-subset.json")
 	matched, warnings := MatchPolicies(input, granular)
 
 	require.Len(t, matched, 2)
@@ -151,15 +151,9 @@ func TestMatchPolicies_UnmatchedRule(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	input := policy.Policy{
-		{
-			Rule:   extensions.Rule{ID: "SC-CODE-01.01"},
-			Checks: []extensions.Check{{ID: "check-1"}},
-		},
-		{
-			Rule:   extensions.Rule{ID: "nonexistent-rule"},
-			Checks: []extensions.Check{{ID: "check-2"}},
-		},
+	input := []plugin.AssessmentConfiguration{
+		{RequirementID: "SC-CODE-01.01"},
+		{RequirementID: "nonexistent-rule"},
 	}
 
 	matched, warnings := MatchPolicies(input, granular)
@@ -173,15 +167,9 @@ func TestMatchPolicies_AllUnmatched(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	input := policy.Policy{
-		{
-			Rule:   extensions.Rule{ID: "no-such-rule-1"},
-			Checks: []extensions.Check{{ID: "check-1"}},
-		},
-		{
-			Rule:   extensions.Rule{ID: "no-such-rule-2"},
-			Checks: []extensions.Check{{ID: "check-2"}},
-		},
+	input := []plugin.AssessmentConfiguration{
+		{RequirementID: "no-such-rule-1"},
+		{RequirementID: "no-such-rule-2"},
 	}
 
 	matched, warnings := MatchPolicies(input, granular)
@@ -193,8 +181,22 @@ func TestMatchPolicies_EmptyInput(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	matched, warnings := MatchPolicies(policy.Policy{}, granular)
+	matched, warnings := MatchPolicies([]plugin.AssessmentConfiguration{}, granular)
 	require.Empty(t, matched)
+	require.Empty(t, warnings)
+}
+
+func TestMatchPolicies_DuplicateRequirements(t *testing.T) {
+	granular, err := LoadGranularPolicies("testdata/policies")
+	require.NoError(t, err)
+
+	input := []plugin.AssessmentConfiguration{
+		{RequirementID: "SC-CODE-01.01"},
+		{RequirementID: "SC-CODE-01.01"},
+	}
+
+	matched, warnings := MatchPolicies(input, granular)
+	require.Len(t, matched, 1, "duplicate requirements should be deduplicated")
 	require.Empty(t, warnings)
 }
 
@@ -227,7 +229,7 @@ func TestEndToEnd_FullPlan(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	input := loadPolicy(t, "testdata/assessment-plan-full.json")
+	input := loadConfigurations(t, "testdata/assessment-plan-full.json")
 	matched, warnings := MatchPolicies(input, granular)
 	require.Empty(t, warnings)
 	require.Len(t, matched, 5)
@@ -253,7 +255,7 @@ func TestEndToEnd_SubsetPlan(t *testing.T) {
 	granular, err := LoadGranularPolicies("testdata/policies")
 	require.NoError(t, err)
 
-	input := loadPolicy(t, "testdata/assessment-plan-subset.json")
+	input := loadConfigurations(t, "testdata/assessment-plan-subset.json")
 	matched, warnings := MatchPolicies(input, granular)
 	require.Empty(t, warnings)
 	require.Len(t, matched, 2)

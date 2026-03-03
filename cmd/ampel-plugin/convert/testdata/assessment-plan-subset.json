@@ -1,26 +1,4 @@
 [
-  {
-    "rule": {
-      "id": "SC-CODE-01.01",
-      "description": "Validate branch protection settings require pull requests"
-    },
-    "checks": [
-      {
-        "id": "check-SC-CODE-01.01",
-        "description": "Verify pull request reviews are required"
-      }
-    ]
-  },
-  {
-    "rule": {
-      "id": "SC-CODE-03.01",
-      "description": "Validate force push blocking is enabled on protected branches"
-    },
-    "checks": [
-      {
-        "id": "check-SC-CODE-03.01",
-        "description": "Verify force pushes are blocked"
-      }
-    ]
-  }
+  {"PlanID": "test-plan", "RequirementID": "SC-CODE-01.01"},
+  {"PlanID": "test-plan", "RequirementID": "SC-CODE-03.01"}
 ]
