@@ -465,3 +465,306 @@ func TestValidate_ShellInjectionInURL(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid characters")
 }
+
+// --- Repository config tests ---
+
+func TestValidate_WithRepositories(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "github-repos",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{
+					URL:      "https://github.com/myorg/repo1",
+					Branches: []string{"main"},
+					Specs:    []string{"builtin:github/branch-rules.yaml"},
+				},
+			},
+		}},
+	}
+	assert.NoError(t, complytime.Validate(cfg))
+}
+
+func TestValidate_RepositoriesNilIsValid(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "local",
+			Policies: []string{"bp"},
+		}},
+	}
+	assert.NoError(t, complytime.Validate(cfg))
+}
+
+func TestValidate_RepositoryEmptyURL(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{URL: "", Branches: []string{"main"}},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "url cannot be empty")
+}
+
+func TestValidate_RepositoryEmptyBranches(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{URL: "https://github.com/myorg/repo1", Branches: []string{}},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "branches list must not be empty")
+}
+
+func TestValidate_RepositoryNonHTTPS(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{URL: "http://github.com/myorg/repo1", Branches: []string{"main"}},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTPS")
+}
+
+func TestValidate_RepositoryUnsupportedHost(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{URL: "https://bitbucket.org/myorg/repo1", Branches: []string{"main"}},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GitHub or GitLab")
+}
+
+func TestValidate_RepositoryBranchShellInjection(t *testing.T) {
+	tests := []struct {
+		name   string
+		branch string
+	}{
+		{"semicolon", "main;rm -rf /"},
+		{"pipe", "main|cat /etc/passwd"},
+		{"ampersand", "main&whoami"},
+		{"backtick", "main`id`"},
+		{"space", "main release"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &complytime.WorkspaceConfig{
+				Policies: []complytime.PolicyEntry{
+					{URL: "registry.com/policies/bp@v1", ID: "bp"},
+				},
+				Targets: []complytime.TargetConfig{{
+					ID:       "t1",
+					Policies: []string{"bp"},
+					Repositories: []complytime.Repository{
+						{URL: "https://github.com/myorg/repo1", Branches: []string{tc.branch}},
+					},
+				}},
+			}
+			err := complytime.Validate(cfg)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid characters")
+		})
+	}
+}
+
+func TestValidate_RepositoryBranchValidNames(t *testing.T) {
+	branches := []string{"main", "release/v1.0", "feature/my-feature", "hotfix_123", "develop"}
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{URL: "https://github.com/myorg/repo1", Branches: branches},
+			},
+		}},
+	}
+	assert.NoError(t, complytime.Validate(cfg))
+}
+
+func TestValidate_RepositorySpecPathTraversal(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{
+					URL:      "https://github.com/myorg/repo1",
+					Branches: []string{"main"},
+					Specs:    []string{"../../etc/passwd"},
+				},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestValidate_RepositoryTokenNewline(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{
+					URL:         "https://github.com/myorg/repo1",
+					Branches:    []string{"main"},
+					AccessToken: "token\ninjection",
+				},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid characters")
+}
+
+func TestValidate_RepositoryTokenNullByte(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{
+					URL:         "https://github.com/myorg/repo1",
+					Branches:    []string{"main"},
+					AccessToken: "token\x00injection",
+				},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid characters")
+}
+
+func TestResolveEnvVars_RepositoryAccessToken(t *testing.T) {
+	t.Setenv("CT_TEST_GH_TOKEN", "ghp_test123")
+
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"p1"},
+			Repositories: []complytime.Repository{
+				{
+					URL:         "https://github.com/myorg/repo1",
+					Branches:    []string{"main"},
+					AccessToken: "${CT_TEST_GH_TOKEN}",
+				},
+			},
+		}},
+	}
+
+	require.NoError(t, complytime.ResolveEnvVars(cfg))
+	assert.Equal(t, "ghp_test123", cfg.Targets[0].Repositories[0].AccessToken)
+}
+
+func TestResolveEnvVars_RepositoryAccessTokenUnset(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"p1"},
+			Repositories: []complytime.Repository{
+				{
+					URL:         "https://github.com/myorg/repo1",
+					Branches:    []string{"main"},
+					AccessToken: "${CT_MISSING_TOKEN_XYZ}",
+				},
+			},
+		}},
+	}
+
+	err := complytime.ResolveEnvVars(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CT_MISSING_TOKEN_XYZ")
+	assert.Contains(t, err.Error(), "unset environment variable")
+}
+
+func TestResolveEnvVars_RepositoryNoAccessToken(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"p1"},
+			Repositories: []complytime.Repository{
+				{
+					URL:      "https://github.com/myorg/repo1",
+					Branches: []string{"main"},
+				},
+			},
+		}},
+	}
+
+	require.NoError(t, complytime.ResolveEnvVars(cfg))
+	assert.Empty(t, cfg.Targets[0].Repositories[0].AccessToken)
+}
+
+func TestValidate_RepositoryBranchPathTraversal(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "registry.com/policies/bp@v1", ID: "bp"},
+		},
+		Targets: []complytime.TargetConfig{{
+			ID:       "t1",
+			Policies: []string{"bp"},
+			Repositories: []complytime.Repository{
+				{URL: "https://github.com/myorg/repo1", Branches: []string{"../../../etc"}},
+			},
+		}},
+	}
+	err := complytime.Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}

@@ -14,56 +14,12 @@ type TargetConfig struct {
 	Repositories []TargetRepository `yaml:"repositories"`
 }
 
-// AmpelTargetConfig is the top-level structure of the ampel-targets.yaml file,
-// keyed by target ID from complytime.yaml.
-type AmpelTargetConfig struct {
-	Targets map[string]AmpelTargetEntry `yaml:"targets"`
-}
-
-// AmpelTargetEntry holds Ampel-specific properties for a single target.
-type AmpelTargetEntry struct {
-	Repositories []TargetRepository `yaml:"repositories"`
-}
-
 // TargetRepository represents a GitHub or GitLab repository to scan.
 type TargetRepository struct {
-	URL      string   `yaml:"url"`
-	Branches []string `yaml:"branches"`
-	Specs    []string `yaml:"specs,omitempty"`
-}
-
-// LoadTargetsByID reads the ID-keyed ampel targets configuration file and
-// validates each entry.
-func LoadTargetsByID(path string) (*AmpelTargetConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading targets file %q: %w", path, err)
-	}
-
-	var config AmpelTargetConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("parsing targets file: %w", err)
-	}
-
-	if len(config.Targets) == 0 {
-		return nil, fmt.Errorf("targets file contains no targets")
-	}
-
-	for id, entry := range config.Targets {
-		if len(entry.Repositories) == 0 {
-			return nil, fmt.Errorf("target %q has no repositories", id)
-		}
-		for i, repo := range entry.Repositories {
-			if err := validateRepoURL(repo.URL); err != nil {
-				return nil, fmt.Errorf("target %q repository %d: %w", id, i, err)
-			}
-			if len(repo.Branches) == 0 {
-				return nil, fmt.Errorf("target %q repository %d (%s): branches list must not be empty", id, i, repo.URL)
-			}
-		}
-	}
-
-	return &config, nil
+	URL         string   `yaml:"url"              json:"url"`
+	Branches    []string `yaml:"branches"         json:"branches"`
+	Specs       []string `yaml:"specs,omitempty"   json:"specs,omitempty"`
+	AccessToken string   `yaml:"access_token,omitempty" json:"access_token,omitempty"`
 }
 
 // LoadTargets reads and validates the target configuration file.

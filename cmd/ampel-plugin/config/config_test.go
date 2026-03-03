@@ -15,19 +15,14 @@ func TestNewConfig(t *testing.T) {
 	require.NotNil(t, c)
 }
 
-func TestPolicyDirPath(t *testing.T) {
-	expected := filepath.Join(complytime.WorkspaceDir, PluginDir, DefaultPolicyDir)
-	require.Equal(t, expected, PolicyDirPath())
+func TestGranularPolicyDirPath(t *testing.T) {
+	expected := filepath.Join(complytime.WorkspaceDir, PluginDir, DefaultGranularPolicyDir)
+	require.Equal(t, expected, GranularPolicyDirPath())
 }
 
 func TestResultsDirPath(t *testing.T) {
 	expected := filepath.Join(complytime.WorkspaceDir, PluginDir, DefaultResultsDir)
 	require.Equal(t, expected, ResultsDirPath())
-}
-
-func TestTargetsFilePath(t *testing.T) {
-	expected := filepath.Join(complytime.WorkspaceDir, PluginDir, DefaultTargetsFile)
-	require.Equal(t, expected, TargetsFilePath())
 }
 
 func TestGeneratedPolicyDirPath(t *testing.T) {
@@ -51,7 +46,8 @@ func TestEnsureDirectories(t *testing.T) {
 	require.NoError(t, err)
 
 	require.DirExists(t, filepath.Join(dir, complytime.WorkspaceDir, PluginDir))
-	require.DirExists(t, filepath.Join(dir, complytime.WorkspaceDir, PluginDir, DefaultPolicyDir))
+	require.DirExists(t, filepath.Join(dir, complytime.WorkspaceDir, PluginDir, DefaultGranularPolicyDir))
+	require.DirExists(t, filepath.Join(dir, complytime.WorkspaceDir, PluginDir, GeneratedPolicyDir))
 	require.DirExists(t, filepath.Join(dir, complytime.WorkspaceDir, PluginDir, DefaultResultsDir))
 	require.DirExists(t, filepath.Join(dir, complytime.WorkspaceDir, PluginDir, "specs"))
 }

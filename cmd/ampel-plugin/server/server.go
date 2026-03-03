@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -39,7 +41,7 @@ func (s *PluginServer) Describe(_ context.Context, _ *plugin.DescribeRequest) (*
 	return &plugin.DescribeResponse{
 		Healthy:                 true,
 		Version:                 "0.1.0",
-		RequiredTargetVariables: []string{"github_token"},
+		RequiredTargetVariables: []string{},
 	}, nil
 }
 
@@ -72,7 +74,10 @@ func (s *PluginServer) Generate(_ context.Context, req *plugin.GenerateRequest) 
 
 	logger.Info("generating AMPEL policy")
 
-	sourceDir := config.PolicyDirPath()
+	sourceDir := config.GranularPolicyDirPath()
+	if customDir, ok := req.GlobalVariables["ampel_policy_dir"]; ok && customDir != "" {
+		sourceDir = customDir
+	}
 	outputDir := config.GeneratedPolicyDirPath()
 
 	granular, err := convert.LoadGranularPolicies(sourceDir)
@@ -124,12 +129,6 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 
 	logger.Info("scanning target repositories")
 
-	targetsPath := config.TargetsFilePath()
-	targetConfig, err := targets.LoadTargetsByID(targetsPath)
-	if err != nil {
-		return nil, fmt.Errorf("loading targets: %w", err)
-	}
-
 	generatedDir := config.GeneratedPolicyDirPath()
 	resultsDir := config.ResultsDirPath()
 	specDir := config.SpecDirPath()
@@ -147,17 +146,28 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 	var repoResults []*results.PerRepoResult
 
 	for _, target := range req.Targets {
-		entry, ok := targetConfig.Targets[target.TargetID]
-		if !ok {
-			availableIDs := make([]string, 0, len(targetConfig.Targets))
-			for id := range targetConfig.Targets {
-				availableIDs = append(availableIDs, id)
-			}
-			return nil, fmt.Errorf("unknown target ID %q, available targets: %s",
-				target.TargetID, strings.Join(availableIDs, ", "))
+		reposJSON, ok := target.Variables["repositories"]
+		if !ok || reposJSON == "" {
+			return nil, fmt.Errorf("target %q: missing or empty 'repositories' variable", target.TargetID)
 		}
 
-		for _, repo := range entry.Repositories {
+		var repos []targets.TargetRepository
+		if err := json.Unmarshal([]byte(reposJSON), &repos); err != nil {
+			return nil, fmt.Errorf("target %q: failed to parse repositories: %w", target.TargetID, err)
+		}
+
+		if len(repos) == 0 {
+			return nil, fmt.Errorf("target %q: repositories list is empty", target.TargetID)
+		}
+
+		// Defense-in-depth: validate repository entries on the plugin side
+		for i, repo := range repos {
+			if err := validatePluginRepoEntry(repo, target.TargetID, i); err != nil {
+				return nil, err
+			}
+		}
+
+		for _, repo := range repos {
 			if len(repo.Specs) == 0 {
 				logger.Warn("skipping repository with no specs defined", "url", repo.URL)
 				continue
@@ -209,6 +219,43 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 	scanResponse := results.ToScanResponse(repoResults)
 	logger.Info("scan complete", "repositories_scanned", len(repoResults))
 	return scanResponse, nil
+}
+
+// validatePluginRepoEntry performs defense-in-depth validation of a repository
+// entry received via the variables JSON. This catches issues even if the CLI
+// validation was bypassed.
+func validatePluginRepoEntry(repo targets.TargetRepository, targetID string, idx int) error {
+	prefix := fmt.Sprintf("target %q repository %d", targetID, idx)
+
+	if repo.URL == "" {
+		return fmt.Errorf("%s: url cannot be empty", prefix)
+	}
+
+	parsed, err := url.Parse(repo.URL)
+	if err != nil {
+		return fmt.Errorf("%s: invalid url %q: %w", prefix, repo.URL, err)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("%s: url %q must use HTTPS scheme", prefix, repo.URL)
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if !strings.Contains(host, "github.com") && !strings.Contains(host, "gitlab.com") {
+		return fmt.Errorf("%s: url %q must point to a GitHub or GitLab host", prefix, repo.URL)
+	}
+
+	if len(repo.Branches) == 0 {
+		return fmt.Errorf("%s: branches list must not be empty", prefix)
+	}
+	for _, branch := range repo.Branches {
+		if strings.ContainsAny(branch, ";|&$`!><()") {
+			return fmt.Errorf("%s: branch name contains invalid characters: %q", prefix, branch)
+		}
+		if strings.Contains(branch, "..") {
+			return fmt.Errorf("%s: branch name contains path traversal: %q", prefix, branch)
+		}
+	}
+
+	return nil
 }
 
 // checkRequiredTools validates that all required AMPEL tools are on PATH.

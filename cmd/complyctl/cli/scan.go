@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -236,9 +237,23 @@ func (o *scanOptions) run(ctx context.Context) error {
 			continue
 		}
 
+		vars := target.Variables
+		if len(target.Repositories) > 0 {
+			vars = make(map[string]string, len(target.Variables)+1)
+			for k, v := range target.Variables {
+				vars[k] = v
+			}
+			reposJSON, err := json.Marshal(target.Repositories)
+			if err != nil {
+				scanSpin.Stop()
+				return fmt.Errorf("failed to serialize repositories for target %s: %w", target.ID, err)
+			}
+			vars["repositories"] = string(reposJSON)
+		}
+
 		pluginTargets := []plugin.Target{{
 			TargetID:  target.ID,
-			Variables: target.Variables,
+			Variables: vars,
 		}}
 
 		var assessments []plugin.AssessmentLog

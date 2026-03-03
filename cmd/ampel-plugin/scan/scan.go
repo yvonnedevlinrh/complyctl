@@ -37,6 +37,7 @@ type RawScanResult struct {
 // CommandRunner abstracts command execution for testing.
 type CommandRunner interface {
 	Run(name string, args ...string) ([]byte, error)
+	RunWithEnv(env []string, name string, args ...string) ([]byte, error)
 }
 
 // ExecRunner executes commands using os/exec.
@@ -46,6 +47,35 @@ type ExecRunner struct{}
 func (r ExecRunner) Run(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
 	return cmd.CombinedOutput()
+}
+
+// RunWithEnv executes the named command with a custom environment.
+func (r ExecRunner) RunWithEnv(env []string, name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Env = env
+	return cmd.CombinedOutput()
+}
+
+// buildTokenEnv creates a copy of the current environment with the
+// appropriate platform-specific token variable set for the given repository.
+// For github.com repos it sets GITHUB_TOKEN; for gitlab.com repos it sets GITLAB_TOKEN.
+func buildTokenEnv(repo targets.TargetRepository) []string {
+	platform, _, _, _ := targets.ParseRepoURL(repo.URL)
+	tokenVar := "GITHUB_TOKEN"
+	if platform == "gitlab" {
+		tokenVar = "GITLAB_TOKEN"
+	}
+
+	env := os.Environ()
+	filtered := make([]string, 0, len(env)+1)
+	prefix := tokenVar + "="
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			filtered = append(filtered, e)
+		}
+	}
+	filtered = append(filtered, tokenVar+"="+repo.AccessToken)
+	return filtered
 }
 
 // WriteSpecFiles writes the embedded spec files to the given directory.
@@ -180,7 +210,14 @@ func ScanRepository(repo targets.TargetRepository, branch, specPath string, cfg 
 	// Run snappy to collect branch protection data as an in-toto attestation
 	snappyArgs := constructSnappyCommand(org, repoName, branch, specPath)
 	logger.Info("running snappy", "repo", repo.URL, "branch", branch, "spec", specPath, "command", strings.Join(snappyArgs, " "))
-	attestationData, err := runner.Run(snappyArgs[0], snappyArgs[1:]...)
+
+	var attestationData []byte
+	if repo.AccessToken != "" {
+		tokenEnv := buildTokenEnv(repo)
+		attestationData, err = runner.RunWithEnv(tokenEnv, snappyArgs[0], snappyArgs[1:]...)
+	} else {
+		attestationData, err = runner.Run(snappyArgs[0], snappyArgs[1:]...)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("snappy failed for %s branch %s spec %s: %w (output: %s)", repo.URL, branch, specPath, err, string(attestationData))
 	}

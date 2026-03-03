@@ -13,6 +13,7 @@ import (
 	"github.com/complytime/complyctl/cmd/ampel-plugin/config"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/convert"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/scan"
+	"github.com/complytime/complyctl/cmd/ampel-plugin/targets"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/toolcheck"
 	"github.com/complytime/complyctl/internal/complytime"
 	"github.com/complytime/complyctl/pkg/plugin"
@@ -124,9 +125,34 @@ func setupServer(t *testing.T) (*PluginServer, string) {
 
 	s := New()
 
-	// Write granular policy files to the default policy dir
-	policyDir := config.PolicyDirPath()
+	// Write granular policy files to the default granular policy dir
+	policyDir := config.GranularPolicyDirPath()
 	writeGranularPolicies(t, policyDir, "SC-CODE-01.01")
+
+	return s, dir
+}
+
+// makeReposJSON marshals a list of target repositories to JSON for use in
+// target variables.
+func makeReposJSON(t *testing.T, repos []targets.TargetRepository) string {
+	t.Helper()
+	data, err := json.Marshal(repos)
+	require.NoError(t, err)
+	return string(data)
+}
+
+// setupServerWithGenerate creates a server and runs Generate to prepare
+// policy artifacts for scanning.
+func setupServerWithGenerate(t *testing.T) (*PluginServer, string) {
+	t.Helper()
+	s, dir := setupServer(t)
+
+	// Generate a policy bundle so paths exist
+	resp, err := s.Generate(context.Background(), &plugin.GenerateRequest{
+		Configuration: makeTestConfigurations(),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
 
 	return s, dir
 }
@@ -139,7 +165,7 @@ func TestDescribe_Healthy(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Healthy)
 	require.Equal(t, "0.1.0", resp.Version)
-	require.Contains(t, resp.RequiredTargetVariables, "github_token")
+	require.Empty(t, resp.RequiredTargetVariables)
 }
 
 // --- Generate tests (US1) ---
@@ -190,7 +216,7 @@ func TestGenerate_OverwritesExistingPolicy(t *testing.T) {
 	s, dir := setupServer(t)
 
 	// Add a second granular policy
-	policyDir := config.PolicyDirPath()
+	policyDir := config.GranularPolicyDirPath()
 	writeGranularPolicies(t, policyDir, "SC-CODE-03.01")
 
 	configs1 := makeTestConfigurations()
@@ -210,6 +236,27 @@ func TestGenerate_OverwritesExistingPolicy(t *testing.T) {
 	data, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 	require.Contains(t, string(data), "SC-CODE-03.01")
+}
+
+func TestGenerate_CustomPolicyDir(t *testing.T) {
+	s, dir := setupServer(t)
+
+	// Write granular policies to a custom directory
+	customDir := filepath.Join(dir, "custom-policies")
+	writeGranularPolicies(t, customDir, "SC-CODE-01.01")
+
+	resp, err := s.Generate(context.Background(), &plugin.GenerateRequest{
+		Configuration:   makeTestConfigurations(),
+		GlobalVariables: map[string]string{"ampel_policy_dir": customDir},
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	require.Empty(t, resp.ErrorMessage)
+
+	outputPath := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir, config.GeneratedPolicyDir, convert.PolicyFileName)
+	data, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "SC-CODE-01.01")
 }
 
 func TestGenerate_MissingToolReturnsError(t *testing.T) {
@@ -242,6 +289,14 @@ type mockScanRunner struct {
 }
 
 func (m *mockScanRunner) Run(name string, args ...string) ([]byte, error) {
+	return m.run(name, args...)
+}
+
+func (m *mockScanRunner) RunWithEnv(_ []string, name string, args ...string) ([]byte, error) {
+	return m.run(name, args...)
+}
+
+func (m *mockScanRunner) run(name string, args ...string) ([]byte, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -258,42 +313,8 @@ func (m *mockScanRunner) Run(name string, args ...string) ([]byte, error) {
 	return nil, nil
 }
 
-func writeIDKeyedTargets(t *testing.T, dir string) {
-	t.Helper()
-	targetsContent := `targets:
-  github-repos:
-    repositories:
-      - url: https://github.com/myorg/repo1
-        branches:
-          - main
-        specs:
-          - builtin:github/branch-rules.yaml
-`
-	ampelDir := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir)
-	require.NoError(t, os.MkdirAll(ampelDir, 0750))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(ampelDir, config.DefaultTargetsFile),
-		[]byte(targetsContent), 0600,
-	))
-}
-
-func setupServerWithTargets(t *testing.T) (*PluginServer, string) {
-	t.Helper()
-	s, dir := setupServer(t)
-	writeIDKeyedTargets(t, dir)
-
-	// Generate a policy bundle so paths exist
-	resp, err := s.Generate(context.Background(), &plugin.GenerateRequest{
-		Configuration: makeTestConfigurations(),
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-
-	return s, dir
-}
-
 func TestScan_ValidTargets(t *testing.T) {
-	s, dir := setupServerWithTargets(t)
+	s, dir := setupServerWithGenerate(t)
 
 	ampelOutput := makeAmpelResultAttestation()
 
@@ -304,9 +325,19 @@ func TestScan_ValidTargets(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
+	repos := []targets.TargetRepository{
+		{
+			URL:      "https://github.com/myorg/repo1",
+			Branches: []string{"main"},
+			Specs:    []string{"builtin:github/branch-rules.yaml"},
+		},
+	}
+
 	resp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{"github_token": "ghp_test123"}},
+			{TargetID: "github-repos", Variables: map[string]string{
+				"repositories": makeReposJSON(t, repos),
+			}},
 		},
 	})
 	require.NoError(t, err)
@@ -321,33 +352,7 @@ func TestScan_ValidTargets(t *testing.T) {
 }
 
 func TestScan_NoSpecs_SkipsRepo(t *testing.T) {
-	s, dir := setupServer(t)
-
-	// Write targets where one entry has specs and repos w/o specs
-	targetsContent := `targets:
-  github-repos:
-    repositories:
-      - url: https://github.com/myorg/repo-no-specs
-        branches:
-          - main
-      - url: https://github.com/myorg/repo-with-specs
-        branches:
-          - main
-        specs:
-          - builtin:github/branch-rules.yaml
-`
-	ampelDir := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir)
-	require.NoError(t, os.WriteFile(
-		filepath.Join(ampelDir, config.DefaultTargetsFile),
-		[]byte(targetsContent), 0600,
-	))
-
-	// Generate a policy bundle so paths exist
-	resp, err := s.Generate(context.Background(), &plugin.GenerateRequest{
-		Configuration: makeTestConfigurations(),
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
+	s, _ := setupServerWithGenerate(t)
 
 	ampelOutput := makeAmpelResultAttestation()
 
@@ -358,9 +363,23 @@ func TestScan_NoSpecs_SkipsRepo(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
+	repos := []targets.TargetRepository{
+		{
+			URL:      "https://github.com/myorg/repo-no-specs",
+			Branches: []string{"main"},
+		},
+		{
+			URL:      "https://github.com/myorg/repo-with-specs",
+			Branches: []string{"main"},
+			Specs:    []string{"builtin:github/branch-rules.yaml"},
+		},
+	}
+
 	scanResp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{"github_token": "ghp_test"}},
+			{TargetID: "github-repos", Variables: map[string]string{
+				"repositories": makeReposJSON(t, repos),
+			}},
 		},
 	})
 	require.NoError(t, err)
@@ -370,31 +389,7 @@ func TestScan_NoSpecs_SkipsRepo(t *testing.T) {
 }
 
 func TestScan_MultipleSpecs(t *testing.T) {
-	s, dir := setupServer(t)
-
-	// Write targets with two specs
-	targetsContent := `targets:
-  github-repos:
-    repositories:
-      - url: https://github.com/myorg/repo1
-        branches:
-          - main
-        specs:
-          - github/branch-rules.yaml
-          - github/custom-check.yaml
-`
-	ampelDir := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir)
-	require.NoError(t, os.WriteFile(
-		filepath.Join(ampelDir, config.DefaultTargetsFile),
-		[]byte(targetsContent), 0600,
-	))
-
-	// Generate a policy bundle
-	resp, err := s.Generate(context.Background(), &plugin.GenerateRequest{
-		Configuration: makeTestConfigurations(),
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
+	s, dir := setupServerWithGenerate(t)
 
 	ampelOutput := makeAmpelResultAttestation()
 
@@ -405,9 +400,19 @@ func TestScan_MultipleSpecs(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
+	repos := []targets.TargetRepository{
+		{
+			URL:      "https://github.com/myorg/repo1",
+			Branches: []string{"main"},
+			Specs:    []string{"github/branch-rules.yaml", "github/custom-check.yaml"},
+		},
+	}
+
 	scanResp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{"github_token": "ghp_test"}},
+			{TargetID: "github-repos", Variables: map[string]string{
+				"repositories": makeReposJSON(t, repos),
+			}},
 		},
 	})
 	require.NoError(t, err)
@@ -423,28 +428,7 @@ func TestScan_MultipleSpecs(t *testing.T) {
 }
 
 func TestScan_ScanError_ContinuesScanning(t *testing.T) {
-	s, dir := setupServerWithTargets(t)
-
-	// Write targets with two repos, both with specs
-	targetsContent := `targets:
-  github-repos:
-    repositories:
-      - url: https://github.com/myorg/repo1
-        branches:
-          - main
-        specs:
-          - builtin:github/branch-rules.yaml
-      - url: https://github.com/myorg/repo2
-        branches:
-          - main
-        specs:
-          - builtin:github/branch-rules.yaml
-`
-	ampelDir := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir)
-	require.NoError(t, os.WriteFile(
-		filepath.Join(ampelDir, config.DefaultTargetsFile),
-		[]byte(targetsContent), 0600,
-	))
+	s, _ := setupServerWithGenerate(t)
 
 	ampelOutput := makeAmpelResultAttestation()
 
@@ -459,9 +443,24 @@ func TestScan_ScanError_ContinuesScanning(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
+	repos := []targets.TargetRepository{
+		{
+			URL:      "https://github.com/myorg/repo1",
+			Branches: []string{"main"},
+			Specs:    []string{"builtin:github/branch-rules.yaml"},
+		},
+		{
+			URL:      "https://github.com/myorg/repo2",
+			Branches: []string{"main"},
+			Specs:    []string{"builtin:github/branch-rules.yaml"},
+		},
+	}
+
 	scanResp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{"github_token": "ghp_test"}},
+			{TargetID: "github-repos", Variables: map[string]string{
+				"repositories": makeReposJSON(t, repos),
+			}},
 		},
 	})
 	require.NoError(t, err)
@@ -477,6 +476,14 @@ type mockCallCountRunner struct {
 }
 
 func (m *mockCallCountRunner) Run(name string, args ...string) ([]byte, error) {
+	return m.run(name, args...)
+}
+
+func (m *mockCallCountRunner) RunWithEnv(_ []string, name string, args ...string) ([]byte, error) {
+	return m.run(name, args...)
+}
+
+func (m *mockCallCountRunner) run(name string, args ...string) ([]byte, error) {
 	*m.callCount++
 	// Fail on the snappy call for the first repo
 	if *m.callCount <= 1 && m.failOnCall == 1 {
@@ -495,8 +502,8 @@ func (m *mockCallCountRunner) Run(name string, args ...string) ([]byte, error) {
 	return nil, nil
 }
 
-func TestScan_MissingTargetsFile(t *testing.T) {
-	s, _ := setupServer(t)
+func TestScan_MissingRepositoriesVariable(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
 
 	origRunner := ScanRunner
 	ScanRunner = &mockScanRunner{
@@ -507,11 +514,11 @@ func TestScan_MissingTargetsFile(t *testing.T) {
 
 	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{"github_token": "ghp_test"}},
+			{TargetID: "github-repos", Variables: map[string]string{}},
 		},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "loading targets")
+	require.Contains(t, err.Error(), "missing or empty 'repositories'")
 }
 
 func TestScan_EmptyTargets(t *testing.T) {
@@ -523,26 +530,46 @@ func TestScan_EmptyTargets(t *testing.T) {
 	require.Contains(t, err.Error(), "no targets")
 }
 
-// --- US3: Target validation tests ---
-
-func TestScan_UnknownTargetID(t *testing.T) {
-	s, _ := setupServerWithTargets(t)
+func TestScan_InvalidRepositoriesJSON(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
 
 	origRunner := ScanRunner
 	ScanRunner = &mockScanRunner{
 		snappyOutput: makeTestAttestation(),
-		ampelOutput:  makeAmpelResultAttestation(),
+		ampelOutput:  []byte("{}"),
 	}
 	defer func() { ScanRunner = origRunner }()
 
 	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "nonexistent-target", Variables: map[string]string{"github_token": "ghp_test"}},
+			{TargetID: "test", Variables: map[string]string{
+				"repositories": "not-json",
+			}},
 		},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "nonexistent-target")
-	require.Contains(t, err.Error(), "unknown target ID")
+	require.Contains(t, err.Error(), "failed to parse repositories")
+}
+
+func TestScan_EmptyRepositoriesList(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
+
+	origRunner := ScanRunner
+	ScanRunner = &mockScanRunner{
+		snappyOutput: makeTestAttestation(),
+		ampelOutput:  []byte("{}"),
+	}
+	defer func() { ScanRunner = origRunner }()
+
+	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
+		Targets: []plugin.Target{
+			{TargetID: "test", Variables: map[string]string{
+				"repositories": "[]",
+			}},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "repositories list is empty")
 }
 
 // Tool check integration tests

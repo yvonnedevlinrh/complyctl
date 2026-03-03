@@ -14,14 +14,12 @@ import (
 const (
 	// PluginDir is the subdirectory name for ampel artifacts within the workspace.
 	PluginDir = "ampel"
-	// DefaultPolicyDir is the default directory name for granular AMPEL policy source files.
-	DefaultPolicyDir = "policy"
+	// DefaultGranularPolicyDir is the default directory name for granular AMPEL policy source files.
+	DefaultGranularPolicyDir = "granular-policies"
 	// GeneratedPolicyDir is the workspace subdirectory for generated policy artifacts.
 	GeneratedPolicyDir = "policy"
 	// DefaultResultsDir is the default directory name for per-repository result files.
 	DefaultResultsDir = "results"
-	// DefaultTargetsFile is the default filename for the target repository configuration.
-	DefaultTargetsFile = "ampel-targets.yaml"
 )
 
 // Config holds the plugin configuration with hardcoded workspace-relative paths.
@@ -41,7 +39,8 @@ func ampelDir() string {
 func EnsureDirectories() error {
 	directories := []string{
 		ampelDir(),
-		PolicyDirPath(),
+		GranularPolicyDirPath(),
+		GeneratedPolicyDirPath(),
 		ResultsDirPath(),
 		SpecDirPath(),
 	}
@@ -54,19 +53,14 @@ func EnsureDirectories() error {
 	return nil
 }
 
-// PolicyDirPath returns the path for the granular policy source directory.
-func PolicyDirPath() string {
-	return filepath.Join(ampelDir(), DefaultPolicyDir)
+// GranularPolicyDirPath returns the default path for granular policy source files.
+func GranularPolicyDirPath() string {
+	return filepath.Join(ampelDir(), DefaultGranularPolicyDir)
 }
 
 // ResultsDirPath returns the path for the per-repository result files.
 func ResultsDirPath() string {
 	return filepath.Join(ampelDir(), DefaultResultsDir)
-}
-
-// TargetsFilePath returns the path for the targets configuration file.
-func TargetsFilePath() string {
-	return filepath.Join(ampelDir(), DefaultTargetsFile)
 }
 
 // GeneratedPolicyDirPath returns the workspace path for generated policy output.

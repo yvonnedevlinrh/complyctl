@@ -62,9 +62,19 @@ type mockRunner struct {
 	ampelOutput  []byte
 	snappyErr    error
 	ampelErr     error
+	lastEnv      []string // captures env from RunWithEnv calls
 }
 
 func (m *mockRunner) Run(name string, args ...string) ([]byte, error) {
+	return m.run(name, args...)
+}
+
+func (m *mockRunner) RunWithEnv(env []string, name string, args ...string) ([]byte, error) {
+	m.lastEnv = env
+	return m.run(name, args...)
+}
+
+func (m *mockRunner) run(name string, args ...string) ([]byte, error) {
 	if name == "snappy" {
 		if m.snappyErr != nil {
 			return nil, m.snappyErr
@@ -347,4 +357,103 @@ func TestScanRepository_InvalidAttestationHash(t *testing.T) {
 	_, err := ScanRepository(repo, "main", "/specs/test.yaml", cfg, runner)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "extracting subject hash")
+}
+
+func TestScanRepository_WithAccessToken_GitHub(t *testing.T) {
+	tmpDir := t.TempDir()
+	attestation := makeTestAttestation("abc123def456")
+	ampelOutput := []byte(`{"predicate":{"status":"PASS","results":[]}}`)
+
+	runner := &mockRunner{
+		snappyOutput: attestation,
+		ampelOutput:  ampelOutput,
+	}
+	repo := targets.TargetRepository{
+		URL:         "https://github.com/myorg/myrepo",
+		Branches:    []string{"main"},
+		AccessToken: "ghp_testtoken123",
+	}
+	cfg := ScanConfig{
+		PolicyPath: "/policy.json",
+		OutputDir:  tmpDir,
+		SpecDir:    t.TempDir(),
+	}
+
+	result, err := ScanRepository(repo, "main", "/specs/test.yaml", cfg, runner)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify RunWithEnv was called with GITHUB_TOKEN set
+	require.NotNil(t, runner.lastEnv)
+	var foundToken bool
+	for _, e := range runner.lastEnv {
+		if e == "GITHUB_TOKEN=ghp_testtoken123" {
+			foundToken = true
+			break
+		}
+	}
+	require.True(t, foundToken, "GITHUB_TOKEN should be set in env")
+}
+
+func TestScanRepository_WithAccessToken_GitLab(t *testing.T) {
+	tmpDir := t.TempDir()
+	attestation := makeTestAttestation("gitlab123")
+	ampelOutput := []byte(`{"predicate":{"status":"PASS","results":[]}}`)
+
+	runner := &mockRunner{
+		snappyOutput: attestation,
+		ampelOutput:  ampelOutput,
+	}
+	repo := targets.TargetRepository{
+		URL:         "https://gitlab.com/myorg/myrepo",
+		Branches:    []string{"main"},
+		AccessToken: "glpat-testtoken",
+	}
+	cfg := ScanConfig{
+		PolicyPath: "/policy.json",
+		OutputDir:  tmpDir,
+		SpecDir:    t.TempDir(),
+	}
+
+	result, err := ScanRepository(repo, "main", "/specs/test.yaml", cfg, runner)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify RunWithEnv was called with GITLAB_TOKEN set
+	require.NotNil(t, runner.lastEnv)
+	var foundToken bool
+	for _, e := range runner.lastEnv {
+		if e == "GITLAB_TOKEN=glpat-testtoken" {
+			foundToken = true
+			break
+		}
+	}
+	require.True(t, foundToken, "GITLAB_TOKEN should be set in env")
+}
+
+func TestScanRepository_NoAccessToken_UsesRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	attestation := makeTestAttestation("abc123")
+	ampelOutput := []byte(`{"predicate":{"status":"PASS","results":[]}}`)
+
+	runner := &mockRunner{
+		snappyOutput: attestation,
+		ampelOutput:  ampelOutput,
+	}
+	repo := targets.TargetRepository{
+		URL:      "https://github.com/myorg/myrepo",
+		Branches: []string{"main"},
+	}
+	cfg := ScanConfig{
+		PolicyPath: "/policy.json",
+		OutputDir:  tmpDir,
+		SpecDir:    t.TempDir(),
+	}
+
+	result, err := ScanRepository(repo, "main", "/specs/test.yaml", cfg, runner)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify RunWithEnv was NOT called (no custom env)
+	require.Nil(t, runner.lastEnv, "RunWithEnv should not be called when no token is set")
 }

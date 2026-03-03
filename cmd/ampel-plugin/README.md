@@ -51,39 +51,39 @@ Complyctl processes the manifest file and sends the configuration values to the 
 These are the configuration values used by ampel-plugin:
 - **workspace**: Directory used to store plugin artifacts (policies, results, specs). This configuration can also be set by complyctl. Within this directory, the plugin creates an `ampel/` subdirectory for its files.
 - **profile**: Is the FrameworkID informed by complyctl. This FrameworkID corresponds to the compliance profile used for branch protection checks.
-- **policy_dir**: Directory containing granular AMPEL policy files (JSON). Default: `policy` (resolved relative to `{workspace}/ampel/`).
 - **results_dir**: Directory for per-repository scan result files. Default: `results` (resolved relative to `{workspace}/ampel/`).
-- **targets_file**: Path to the YAML file defining which repositories and branches to scan. Default: `ampel-targets.yaml` (resolved relative to `{workspace}/ampel/`).
 
 ### Target Configuration
 
-The plugin requires a targets file that defines which repositories and branches to scan. The file uses YAML format:
+Repositories to scan are defined directly in `complytime.yaml` under the `repositories` field of each target entry. This eliminates the need for a separate targets file.
 
 ```yaml
-repositories:
-  - url: https://github.com/myorg/myrepo
-    branches:
-      - main
-      - release
-    specs:
-      - builtin:github/branch-rules.yaml
-  - url: https://github.com/myorg/another-repo
-    branches:
-      - main
-    specs:
-      - builtin:github/branch-rules.yaml
+targets:
+  - id: github-repos
+    policies:
+      - branch-protection
+    repositories:
+      - url: https://github.com/myorg/myrepo
+        branches: [main, release]
+        specs: [builtin:github/branch-rules.yaml]
+        access_token: ${MY_GITHUB_PAT}  # optional, expanded from env
+      - url: https://github.com/myorg/another-repo
+        branches: [main]
+        specs: [builtin:github/branch-rules.yaml]
+        # no access_token → snappy reads GITHUB_TOKEN from env at runtime
 ```
 
 Each repository entry supports:
-- **url** (required): HTTPS URL to a GitHub repository.
+- **url** (required): HTTPS URL to a GitHub or GitLab repository.
 - **branches** (required): List of branch names to scan.
 - **specs** (required): List of snappy spec file references. Use the `builtin:` prefix for embedded specs (e.g., `builtin:github/branch-rules.yaml`) or absolute paths for custom specs.
+- **access_token** (optional): Per-repository authentication token. Supports `${VAR}` env var expansion. When set, the token is injected as `GITHUB_TOKEN` or `GITLAB_TOKEN` (based on the repository URL platform) into the snappy subprocess environment. When omitted, snappy inherits the parent process environment.
 
-A sample targets file is available at `docs/samples/ampel-targets.yaml`.
+See `docs/configuration.md` for comprehensive examples including mixed-platform scanning and token authentication.
 
 ### AMPEL Policies
 
-The plugin uses granular AMPEL policy files (one JSON file per control) stored in the `policy_dir` directory. During the `generate` phase, the plugin matches OSCAL assessment plan rules to these policies and merges the matched policies into a single bundle used for verification.
+The plugin uses granular AMPEL policy files (one JSON file per control) stored in the granular policy directory (default: `{workspace}/ampel/granular-policies/`, configurable via the `ampel_policy_dir` global variable in `complytime.yaml`). During the `generate` phase, the plugin matches OSCAL assessment plan rules to these policies and merges the matched policies into a single bundle used for verification. Generated output is written to `{workspace}/ampel/policy/`.
 
 Sample policy files are available in the [complytime-demos](https://github.com/complytime/complytime-demos) repository under `base_ansible_env/files/ampel-policies/`.
 
@@ -99,7 +99,7 @@ When the plugin receives the `generate` command from complyctl, it will:
 
 When the plugin receives the `scan` command from complyctl, it will:
 * Validate that `snappy` and `ampel` CLI tools are available on the system PATH
-* Load the target repository configuration from the targets file
+* Load the target repository configuration from the `repositories` variable (passed as JSON by complyctl)
 * For each repository, branch, and spec combination:
   * Run `snappy snap` to collect branch protection data from the GitHub API as an in-toto attestation
   * Extract the subject hash from the snappy attestation
