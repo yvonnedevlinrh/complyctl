@@ -616,6 +616,20 @@ guidelines:
 		{mediaType: gemaraPolicyType, data: cisPolicy},
 	})
 
+	// policies/ampel-branch-protection — AMPEL branch protection controls
+	ampelCatalog, err := seedData.ReadFile("testdata/ampel-branch-protection-catalog.yaml")
+	if err != nil {
+		log.Fatalf("failed to load AMPEL branch protection catalog seed data: %v", err)
+	}
+	ampelPolicy, err := seedData.ReadFile("testdata/ampel-branch-protection-policy.yaml")
+	if err != nil {
+		log.Fatalf("failed to load AMPEL branch protection policy seed data: %v", err)
+	}
+	s.addArtifact("policies/ampel-branch-protection", []string{"v1.0.0", "latest"}, []layerDef{
+		{mediaType: gemaraCatalogType, data: ampelCatalog},
+		{mediaType: gemaraPolicyType, data: ampelPolicy},
+	})
+
 	// Enrichment mappings
 	s.enrichments["OPA:deny-root-user"] = &enrichmentMapping{
 		control: enrichmentControl{

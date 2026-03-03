@@ -1,0 +1,72 @@
+title: AMPEL Branch Protection Policy
+metadata:
+    id: ampel-branch-protection-policy
+    description: Automated evaluation policy for branch protection controls using AMPEL
+    author:
+        id: complytime
+        name: ComplyTime
+        type: Software-Assisted
+    mapping-references:
+        - id: ampel-branch-protection
+          title: Branch Protection Controls
+          version: 1.0.0
+          description: Control catalog for branch protection rules
+contacts:
+    responsible:
+        - name: Repository Administrator
+    accountable:
+        - name: Security Team
+scope:
+    in:
+        technologies:
+            - GitHub
+            - GitLab
+        users:
+            - Repository maintainers
+imports:
+    catalogs:
+        - reference-id: ampel-branch-protection
+adherence:
+    evaluation-methods:
+        - type: automated
+          description: AMPEL automated branch protection evaluation
+          executor:
+              id: ampel
+              name: AMPEL
+              type: Software
+    assessment-plans:
+        - id: SC-CODE-01.01
+          requirement-id: SC-CODE-01.01-ar
+          frequency: on-demand
+          evaluation-methods:
+              - type: automated
+                executor:
+                    id: ampel
+        - id: SC-CODE-02.01
+          requirement-id: SC-CODE-02.01-ar
+          frequency: on-demand
+          evaluation-methods:
+              - type: automated
+                executor:
+                    id: ampel
+        - id: SC-CODE-03.01
+          requirement-id: SC-CODE-03.01-ar
+          frequency: on-demand
+          evaluation-methods:
+              - type: automated
+                executor:
+                    id: ampel
+        - id: SC-CODE-04.01
+          requirement-id: SC-CODE-04.01-ar
+          frequency: on-demand
+          evaluation-methods:
+              - type: automated
+                executor:
+                    id: ampel
+        - id: SC-CODE-05.01
+          requirement-id: SC-CODE-05.01-ar
+          frequency: on-demand
+          evaluation-methods:
+              - type: automated
+                executor:
+                    id: ampel
