@@ -169,13 +169,9 @@ func extractHashFromStatement(data []byte) (string, error) {
 func ScanRepository(repo targets.TargetRepository, branch, specPath string, cfg ScanConfig, runner CommandRunner) (*RawScanResult, error) {
 	logger := hclog.Default()
 
-	platform, org, repoName, err := targets.ParseRepoURL(repo.URL)
+	_, org, repoName, err := targets.ParseRepoURL(repo.URL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing repository URL: %w", err)
-	}
-
-	if platform != "github" {
-		return nil, fmt.Errorf("snappy specs are currently only available for GitHub repositories; %s is not supported", platform)
 	}
 
 	specLabel := sanitizeSpecName(specPath)

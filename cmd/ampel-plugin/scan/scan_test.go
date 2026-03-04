@@ -244,21 +244,29 @@ func TestScanRepository_MockSuccess(t *testing.T) {
 	require.Equal(t, ampelOutput, savedAmpel)
 }
 
-func TestScanRepository_GitLabUnsupported(t *testing.T) {
-	runner := &mockRunner{}
+func TestScanRepository_GitLabSupported(t *testing.T) {
+	tmpDir := t.TempDir()
+	attestation := makeTestAttestation("gitlab123")
+	ampelOutput := []byte(`{"predicate":{"status":"PASS","results":[]}}`)
+
+	runner := &mockRunner{
+		snappyOutput: attestation,
+		ampelOutput:  ampelOutput,
+	}
 	repo := targets.TargetRepository{
 		URL:      "https://gitlab.com/myorg/myrepo",
 		Branches: []string{"main"},
 	}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
-		OutputDir:  t.TempDir(),
+		OutputDir:  tmpDir,
 		SpecDir:    t.TempDir(),
 	}
 
-	_, err := ScanRepository(repo, "main", "/specs/test.yaml", cfg, runner)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not supported")
+	result, err := ScanRepository(repo, "main", "/specs/test.yaml", cfg, runner)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, ampelOutput, result.Output)
 }
 
 func TestScanRepository_SnappyError(t *testing.T) {

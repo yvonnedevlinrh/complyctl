@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
@@ -138,7 +139,7 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 	}
 
 	scanCfg := scan.ScanConfig{
-		PolicyPath: generatedDir + "/" + convert.PolicyFileName,
+		PolicyPath: filepath.Join(generatedDir, convert.PolicyFileName),
 		OutputDir:  resultsDir,
 		SpecDir:    specDir,
 	}
