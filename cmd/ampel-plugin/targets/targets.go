@@ -19,7 +19,7 @@ type TargetRepository struct {
 	URL         string   `yaml:"url"              json:"url"`
 	Branches    []string `yaml:"branches"         json:"branches"`
 	Specs       []string `yaml:"specs,omitempty"   json:"specs,omitempty"`
-	AccessToken string   `yaml:"access_token,omitempty" json:"access_token,omitempty"`
+	AccessToken string   `yaml:"access_token,omitempty" json:"access_token,omitempty"` //nolint:gosec // G117: env var name, not a credential
 }
 
 // LoadTargets reads and validates the target configuration file.

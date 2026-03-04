@@ -233,6 +233,7 @@ func TestPolicyIDs(t *testing.T) {
 	assert.NotNil(t, m["cis-fedora"])
 }
 
+//nolint:gosec // G101: test data, not real credentials
 func TestResolveEnvVars_Substitution(t *testing.T) {
 	t.Setenv("CT_TEST_TOKEN", "secret123")
 	t.Setenv("CT_TEST_HOST", "db.example.com")
@@ -256,6 +257,7 @@ func TestResolveEnvVars_Substitution(t *testing.T) {
 	assert.Equal(t, "no-env-ref", cfg.Targets[0].Variables["plain"])
 }
 
+//nolint:gosec // G101: test data, not real credentials
 func TestResolveEnvVars_UnsetVariableErrors(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
@@ -688,6 +690,7 @@ func TestValidate_RepositoryTokenNullByte(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid characters")
 }
 
+//nolint:gosec // G101: test data, not real credentials
 func TestResolveEnvVars_RepositoryAccessToken(t *testing.T) {
 	t.Setenv("CT_TEST_GH_TOKEN", "ghp_test123")
 
@@ -710,6 +713,7 @@ func TestResolveEnvVars_RepositoryAccessToken(t *testing.T) {
 	assert.Equal(t, "ghp_test123", cfg.Targets[0].Repositories[0].AccessToken)
 }
 
+//nolint:gosec // G101: test data, not real credentials
 func TestResolveEnvVars_RepositoryAccessTokenUnset(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},

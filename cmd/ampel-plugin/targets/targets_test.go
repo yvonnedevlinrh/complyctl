@@ -163,4 +163,3 @@ func writeTestFile(t *testing.T, path string, data []byte) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(path, data, 0600))
 }
-

@@ -55,7 +55,7 @@ func main() {
 	registerEnrichRoute(mux, store)
 
 	addr := ":" + port
-	log.Printf("Gemara Content Service listening on http://localhost%s", addr)
+	log.Printf("Gemara Content Service listening on http://localhost%s", addr) //nolint:gosec // G706: addr is from a hardcoded port, not user input
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -173,7 +173,7 @@ func serveManifest(w http.ResponseWriter, r *http.Request, store *contentStore, 
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(art.manifestBytes)
+	_, _ = w.Write(art.manifestBytes) //nolint:gosec // G705: internal test mock data, not user-tainted
 }
 
 // serveBlob handles GET /v2/{name}/blobs/{digest}

@@ -61,7 +61,7 @@ func (r ExecRunner) RunWithEnv(env []string, name string, args ...string) ([]byt
 // For github.com repos it sets GITHUB_TOKEN; for gitlab.com repos it sets GITLAB_TOKEN.
 func buildTokenEnv(repo targets.TargetRepository) []string {
 	platform, _, _, _ := targets.ParseRepoURL(repo.URL)
-	tokenVar := "GITHUB_TOKEN"
+	tokenVar := "GITHUB_TOKEN" //nolint:gosec // env var name, not a credential
 	if platform == "gitlab" {
 		tokenVar = "GITLAB_TOKEN"
 	}
