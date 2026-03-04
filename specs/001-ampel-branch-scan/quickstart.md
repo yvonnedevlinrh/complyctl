@@ -98,8 +98,8 @@ compliance and produces:
 ├── assessment-plan.json
 ├── assessment-results.json
 ├── ampel-policies/
-│   ├── SC-CODE-01.01-require-pull-request.json
-│   ├── SC-CODE-02.01-minimum-approvals.json
+│   ├── BP-01.01-require-pull-request.json
+│   ├── BP-02.01-minimum-approvals.json
 │   └── ...
 └── ampel/
     ├── ampel-targets.yaml

@@ -37,11 +37,11 @@ func TestLoadGranularPolicies(t *testing.T) {
 	require.Len(t, policies, 5)
 
 	expectedIDs := []string{
-		"SC-CODE-01.01",
-		"SC-CODE-02.01",
-		"SC-CODE-03.01",
-		"SC-CODE-04.01",
-		"SC-CODE-05.01",
+		"BP-1.01",
+		"BP-2.01",
+		"BP-3.01",
+		"BP-4.01",
+		"BP-5.01",
 	}
 	for _, id := range expectedIDs {
 		p, ok := policies[id]
@@ -143,8 +143,8 @@ func TestMatchPolicies_Subset(t *testing.T) {
 
 	require.Len(t, matched, 2)
 	require.Empty(t, warnings)
-	require.Equal(t, "SC-CODE-01.01", matched[0].ID)
-	require.Equal(t, "SC-CODE-03.01", matched[1].ID)
+	require.Equal(t, "BP-1.01", matched[0].ID)
+	require.Equal(t, "BP-3.01", matched[1].ID)
 }
 
 func TestMatchPolicies_UnmatchedRule(t *testing.T) {
@@ -152,13 +152,13 @@ func TestMatchPolicies_UnmatchedRule(t *testing.T) {
 	require.NoError(t, err)
 
 	input := []plugin.AssessmentConfiguration{
-		{RequirementID: "SC-CODE-01.01"},
+		{RequirementID: "BP-1.01"},
 		{RequirementID: "nonexistent-rule"},
 	}
 
 	matched, warnings := MatchPolicies(input, granular)
 	require.Len(t, matched, 1)
-	require.Equal(t, "SC-CODE-01.01", matched[0].ID)
+	require.Equal(t, "BP-1.01", matched[0].ID)
 	require.Len(t, warnings, 1)
 	require.Contains(t, warnings[0], "nonexistent-rule")
 }
@@ -191,8 +191,8 @@ func TestMatchPolicies_DuplicateRequirements(t *testing.T) {
 	require.NoError(t, err)
 
 	input := []plugin.AssessmentConfiguration{
-		{RequirementID: "SC-CODE-01.01"},
-		{RequirementID: "SC-CODE-01.01"},
+		{RequirementID: "BP-1.01"},
+		{RequirementID: "BP-1.01"},
 	}
 
 	matched, warnings := MatchPolicies(input, granular)
@@ -204,8 +204,8 @@ func TestMatchPolicies_DuplicateRequirements(t *testing.T) {
 
 func TestMergeToBundle(t *testing.T) {
 	policies := []*AmpelPolicy{
-		{ID: "SC-CODE-01.01", Meta: PolicyMeta{Description: "PR required"}, Tenets: []AmpelTenet{{ID: "01"}}},
-		{ID: "SC-CODE-03.01", Meta: PolicyMeta{Description: "Force push"}, Tenets: []AmpelTenet{{ID: "01"}}},
+		{ID: "BP-1.01", Meta: PolicyMeta{Description: "PR required"}, Tenets: []AmpelTenet{{ID: "01"}}},
+		{ID: "BP-3.01", Meta: PolicyMeta{Description: "Force push"}, Tenets: []AmpelTenet{{ID: "01"}}},
 	}
 
 	bundle := MergeToBundle(policies)
@@ -213,8 +213,8 @@ func TestMergeToBundle(t *testing.T) {
 	require.Len(t, bundle.Meta.Frameworks, 1)
 	require.Equal(t, "ComplyTime-AMPEL-Policy", bundle.Meta.Frameworks[0].ID)
 	require.Len(t, bundle.Policies, 2)
-	require.Equal(t, "SC-CODE-01.01", bundle.Policies[0].ID)
-	require.Equal(t, "SC-CODE-03.01", bundle.Policies[1].ID)
+	require.Equal(t, "BP-1.01", bundle.Policies[0].ID)
+	require.Equal(t, "BP-3.01", bundle.Policies[1].ID)
 }
 
 func TestMergeToBundle_Empty(t *testing.T) {

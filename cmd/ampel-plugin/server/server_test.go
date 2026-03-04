@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 
 func makeTestConfigurations() []plugin.AssessmentConfiguration {
 	return []plugin.AssessmentConfiguration{
-		{RequirementID: "SC-CODE-01.01"},
+		{RequirementID: "BP-1.01"},
 	}
 }
 
@@ -63,7 +63,7 @@ func makeAmpelResultAttestation() []byte {
 			"results": []map[string]any{
 				{
 					"status": "PASS",
-					"policy": map[string]string{"id": "SC-CODE-01.01"},
+					"policy": map[string]string{"id": "BP-1.01"},
 					"eval_results": []map[string]any{
 						{
 							"id":         "01",
@@ -90,7 +90,7 @@ func writeGranularPolicies(t *testing.T, dir string, policyIDs ...string) {
 			ID: id,
 			Meta: convert.PolicyMeta{
 				Description: "Test policy " + id,
-				Controls:    []convert.PolicyControl{{Framework: "SC", Class: "SC-CODE", ID: "01"}},
+				Controls:    []convert.PolicyControl{{Framework: "repo-branch-protection", Class: "source-code", ID: "BP-1"}},
 			},
 			Tenets: []convert.AmpelTenet{
 				{
@@ -126,7 +126,7 @@ func setupServer(t *testing.T) (*PluginServer, string) {
 
 	// Write granular policy files to the default granular policy dir
 	policyDir := config.GranularPolicyDirPath()
-	writeGranularPolicies(t, policyDir, "SC-CODE-01.01")
+	writeGranularPolicies(t, policyDir, "BP-1.01")
 
 	return s, dir
 }
@@ -172,7 +172,7 @@ func TestGenerate_ValidConfiguration(t *testing.T) {
 	outputPath := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir, config.GeneratedPolicyDir, convert.PolicyFileName)
 	data, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
-	require.Contains(t, string(data), "SC-CODE-01.01")
+	require.Contains(t, string(data), "BP-1.01")
 	require.Contains(t, string(data), "complytime-ampel-policy")
 }
 
@@ -207,11 +207,11 @@ func TestGenerate_OverwritesExistingPolicy(t *testing.T) {
 
 	// Add a second granular policy
 	policyDir := config.GranularPolicyDirPath()
-	writeGranularPolicies(t, policyDir, "SC-CODE-03.01")
+	writeGranularPolicies(t, policyDir, "BP-3.01")
 
 	configs1 := makeTestConfigurations()
 	configs2 := []plugin.AssessmentConfiguration{
-		{RequirementID: "SC-CODE-03.01"},
+		{RequirementID: "BP-3.01"},
 	}
 
 	resp1, err := s.Generate(context.Background(), &plugin.GenerateRequest{Configuration: configs1})
@@ -225,7 +225,7 @@ func TestGenerate_OverwritesExistingPolicy(t *testing.T) {
 	outputPath := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir, config.GeneratedPolicyDir, convert.PolicyFileName)
 	data, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
-	require.Contains(t, string(data), "SC-CODE-03.01")
+	require.Contains(t, string(data), "BP-3.01")
 }
 
 func TestGenerate_CustomPolicyDir(t *testing.T) {
@@ -233,7 +233,7 @@ func TestGenerate_CustomPolicyDir(t *testing.T) {
 
 	// Write granular policies to a custom directory
 	customDir := filepath.Join(dir, "custom-policies")
-	writeGranularPolicies(t, customDir, "SC-CODE-01.01")
+	writeGranularPolicies(t, customDir, "BP-1.01")
 
 	resp, err := s.Generate(context.Background(), &plugin.GenerateRequest{
 		Configuration:   makeTestConfigurations(),
@@ -246,7 +246,7 @@ func TestGenerate_CustomPolicyDir(t *testing.T) {
 	outputPath := filepath.Join(dir, complytime.WorkspaceDir, config.PluginDir, config.GeneratedPolicyDir, convert.PolicyFileName)
 	data, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
-	require.Contains(t, string(data), "SC-CODE-01.01")
+	require.Contains(t, string(data), "BP-1.01")
 }
 
 func TestGenerate_MissingToolReturnsError(t *testing.T) {

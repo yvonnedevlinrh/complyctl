@@ -8,7 +8,7 @@ The ampel-plugin extends complyctl to verify branch protection settings on GitHu
 
 A central design choice in the ampel-plugin is the use of **granular AMPEL policies** — one JSON file per control — rather than a single monolithic policy bundle.
 
-Each policy file is self-contained and independently authored. For example, `SC-CODE-01.01-require-pull-request.json` defines a single control with its own CEL verification logic, attestation type references, assessment messages, and remediation guidance. This makes policies:
+Each policy file is self-contained and independently authored. For example, `BP-01.01-require-pull-request.json` defines a single control with its own CEL verification logic, attestation type references, assessment messages, and remediation guidance. This makes policies:
 
 - **Easy to author and review**: Each file covers one control with a clear purpose.
 - **Independently testable**: A single policy can be validated with `ampel verify` in isolation.

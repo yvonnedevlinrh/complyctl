@@ -1,7 +1,7 @@
 [
-  {"PlanID": "test-plan", "RequirementID": "SC-CODE-01.01"},
-  {"PlanID": "test-plan", "RequirementID": "SC-CODE-02.01"},
-  {"PlanID": "test-plan", "RequirementID": "SC-CODE-03.01"},
-  {"PlanID": "test-plan", "RequirementID": "SC-CODE-04.01"},
-  {"PlanID": "test-plan", "RequirementID": "SC-CODE-05.01"}
+  {"PlanID": "test-plan", "RequirementID": "BP-1.01"},
+  {"PlanID": "test-plan", "RequirementID": "BP-2.01"},
+  {"PlanID": "test-plan", "RequirementID": "BP-3.01"},
+  {"PlanID": "test-plan", "RequirementID": "BP-4.01"},
+  {"PlanID": "test-plan", "RequirementID": "BP-5.01"}
 ]

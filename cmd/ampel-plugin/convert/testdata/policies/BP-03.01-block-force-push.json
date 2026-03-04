@@ -1,9 +1,9 @@
 {
-  "id": "SC-CODE-03.01",
+  "id": "BP-3.01",
   "meta": {
     "description": "Validate force push blocking is enabled on protected branches via GitHub API or GitLab API",
     "controls": [
-      { "framework": "SC", "class": "SC-CODE", "id": "03" },
+      { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-3" },
       { "framework": "OSPS", "class": "OSPS-QA", "id": "07" }
     ]
   },

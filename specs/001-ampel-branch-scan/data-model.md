@@ -15,7 +15,7 @@ rules and merged into a combined bundle during generate.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| ID | string | Policy identifier matching OSCAL rule ID (e.g., "SC-CODE-01.01") |
+| ID | string | Policy identifier matching OSCAL rule ID (e.g., "BP-1.01") |
 | Meta | AmpelMeta | Policy metadata including description and control references |
 | Tenets | []AmpelTenet | CEL-based verification checks |
 

@@ -19,7 +19,7 @@ import (
 // RepoTarget holds the repository information extracted from target variables.
 type RepoTarget struct {
 	URL         string
-	AccessToken string
+	AccessToken string `json:"-"` //nolint:gosec // G117: struct field, not a hardcoded credential
 	Platform    string // "github" or "gitlab"
 }
 

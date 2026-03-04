@@ -1,9 +1,9 @@
 {
-  "id": "SC-CODE-04.01",
+  "id": "BP-4.01",
   "meta": {
     "description": "Validate admin bypass prevention is enabled via GitHub API or GitLab API",
     "controls": [
-      { "framework": "SC", "class": "SC-CODE", "id": "03" },
+      { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-4" },
       { "framework": "OSPS", "class": "OSPS-QA", "id": "07" }
     ]
   },

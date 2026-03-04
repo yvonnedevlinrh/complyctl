@@ -10,11 +10,11 @@
   },
   "policies": [
     {
-      "id": "SC-CODE-01.01",
+      "id": "BP-1.01",
       "meta": {
         "description": "Validate branch protection settings require pull requests via GitHub API or GitLab API",
         "controls": [
-          { "framework": "SC", "class": "SC-CODE", "id": "01" },
+          { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-1" },
           { "framework": "OSPS", "class": "OSPS-QA", "id": "07" }
         ]
       },
@@ -36,11 +36,11 @@
       ]
     },
     {
-      "id": "SC-CODE-02.01",
+      "id": "BP-2.01",
       "meta": {
         "description": "Validate minimum approval count and prevent self-approval via GitHub API or GitLab API",
         "controls": [
-          { "framework": "SC", "class": "SC-CODE", "id": "02" },
+          { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-2" },
           { "framework": "OSPS", "class": "OSPS-QA", "id": "07" }
         ]
       },
@@ -90,11 +90,11 @@
       ]
     },
     {
-      "id": "SC-CODE-03.01",
+      "id": "BP-3.01",
       "meta": {
         "description": "Validate force push blocking is enabled on protected branches via GitHub API or GitLab API",
         "controls": [
-          { "framework": "SC", "class": "SC-CODE", "id": "03" },
+          { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-3" },
           { "framework": "OSPS", "class": "OSPS-QA", "id": "07" }
         ]
       },
@@ -116,11 +116,11 @@
       ]
     },
     {
-      "id": "SC-CODE-04.01",
+      "id": "BP-4.01",
       "meta": {
         "description": "Validate admin bypass prevention is enabled via GitHub API or GitLab API",
         "controls": [
-          { "framework": "SC", "class": "SC-CODE", "id": "03" },
+          { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-4" },
           { "framework": "OSPS", "class": "OSPS-QA", "id": "07" }
         ]
       },
@@ -142,11 +142,11 @@
       ]
     },
     {
-      "id": "SC-CODE-05.01",
+      "id": "BP-5.01",
       "meta": {
         "description": "Validate code owner review requirements are enabled when CODEOWNERS file exists via GitHub API or GitLab API",
         "controls": [
-          { "framework": "SC", "class": "SC-CODE", "id": "05" }
+          { "framework": "repo-branch-protection", "class": "source-code", "id": "BP-5" }
         ]
       },
       "tenets": [

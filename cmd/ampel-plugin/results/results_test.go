@@ -29,8 +29,8 @@ func TestParseAmpelOutput_Pass(t *testing.T) {
 	for _, f := range result.Findings {
 		require.Equal(t, "pass", f.Result)
 	}
-	require.Equal(t, "check-SC-CODE-01.01", result.Findings[0].TenetID)
-	require.Equal(t, "check-SC-CODE-03.01", result.Findings[1].TenetID)
+	require.Equal(t, "check-BP-1.01", result.Findings[0].TenetID)
+	require.Equal(t, "check-BP-3.01", result.Findings[1].TenetID)
 }
 
 func TestParseAmpelOutput_Fail(t *testing.T) {
@@ -96,7 +96,7 @@ func TestParseAmpelOutput_ControlCharsStripped(t *testing.T) {
 			Results: []ampelPolicyResult{
 				{
 					Status: "PASS",
-					Policy: ampelPolicyRef{ID: "SC-CODE-01.01"},
+					Policy: ampelPolicyRef{ID: "BP-1.01"},
 					EvalResults: []ampelEvalResult{
 						{
 							ID:         "01",
@@ -125,7 +125,7 @@ func TestParseAmpelOutput_OversizedField(t *testing.T) {
 			Results: []ampelPolicyResult{
 				{
 					Status: "PASS",
-					Policy: ampelPolicyRef{ID: "SC-CODE-01.01"},
+					Policy: ampelPolicyRef{ID: "BP-1.01"},
 					EvalResults: []ampelEvalResult{
 						{
 							ID:         "01",
@@ -230,7 +230,7 @@ func TestToScanResponse(t *testing.T) {
 			Branch:     "main",
 			Status:     "pass",
 			Findings: []Finding{
-				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "pass", Reason: "OK"},
+				{TenetID: "check-BP-1.01", Title: "Check 1", Result: "pass", Reason: "OK"},
 			},
 		},
 		{
@@ -238,7 +238,7 @@ func TestToScanResponse(t *testing.T) {
 			Branch:     "main",
 			Status:     "fail",
 			Findings: []Finding{
-				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "fail", Reason: "Not configured"},
+				{TenetID: "check-BP-1.01", Title: "Check 1", Result: "fail", Reason: "Not configured"},
 			},
 		},
 	}
@@ -247,7 +247,7 @@ func TestToScanResponse(t *testing.T) {
 	// Same requirement ID → grouped into one assessment with two steps
 	require.Len(t, resp.Assessments, 1)
 	assessment := resp.Assessments[0]
-	require.Equal(t, "SC-CODE-01.01", assessment.RequirementID)
+	require.Equal(t, "BP-1.01", assessment.RequirementID)
 	require.Len(t, assessment.Steps, 2)
 	require.Equal(t, plugin.ConfidenceLevelHigh, assessment.Confidence)
 
@@ -271,8 +271,8 @@ func TestToScanResponse_MultipleChecks(t *testing.T) {
 			Branch:     "main",
 			Status:     "pass",
 			Findings: []Finding{
-				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "pass", Reason: "OK"},
-				{TenetID: "check-SC-CODE-02.01", Title: "Check 2", Result: "pass", Reason: "OK"},
+				{TenetID: "check-BP-1.01", Title: "Check 1", Result: "pass", Reason: "OK"},
+				{TenetID: "check-BP-2.01", Title: "Check 2", Result: "pass", Reason: "OK"},
 			},
 		},
 		{
@@ -280,8 +280,8 @@ func TestToScanResponse_MultipleChecks(t *testing.T) {
 			Branch:     "main",
 			Status:     "fail",
 			Findings: []Finding{
-				{TenetID: "check-SC-CODE-01.01", Title: "Check 1", Result: "fail", Reason: "Not configured"},
-				{TenetID: "check-SC-CODE-02.01", Title: "Check 2", Result: "pass", Reason: "OK"},
+				{TenetID: "check-BP-1.01", Title: "Check 1", Result: "fail", Reason: "Not configured"},
+				{TenetID: "check-BP-2.01", Title: "Check 2", Result: "pass", Reason: "OK"},
 			},
 		},
 	}
