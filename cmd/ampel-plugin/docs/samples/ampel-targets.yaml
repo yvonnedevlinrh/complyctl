@@ -1,0 +1,8 @@
+repositories:
+  - url: https://github.com/complytime/complyctl
+    branches:
+      - main
+  - url: https://gitlab.com/complytime/org-infra
+    branches:
+      - main
+      - release

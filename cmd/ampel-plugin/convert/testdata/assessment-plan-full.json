@@ -1,0 +1,62 @@
+[
+  {
+    "rule": {
+      "id": "SC-CODE-01.01",
+      "description": "Validate branch protection settings require pull requests"
+    },
+    "checks": [
+      {
+        "id": "check-SC-CODE-01.01",
+        "description": "Verify pull request reviews are required"
+      }
+    ]
+  },
+  {
+    "rule": {
+      "id": "SC-CODE-02.01",
+      "description": "Validate minimum approval count and prevent self-approval"
+    },
+    "checks": [
+      {
+        "id": "check-SC-CODE-02.01",
+        "description": "Verify minimum approval count is enforced"
+      }
+    ]
+  },
+  {
+    "rule": {
+      "id": "SC-CODE-03.01",
+      "description": "Validate force push blocking is enabled on protected branches"
+    },
+    "checks": [
+      {
+        "id": "check-SC-CODE-03.01",
+        "description": "Verify force pushes are blocked"
+      }
+    ]
+  },
+  {
+    "rule": {
+      "id": "SC-CODE-04.01",
+      "description": "Validate admin bypass prevention is enabled"
+    },
+    "checks": [
+      {
+        "id": "check-SC-CODE-04.01",
+        "description": "Verify admin bypass prevention is enabled"
+      }
+    ]
+  },
+  {
+    "rule": {
+      "id": "SC-CODE-05.01",
+      "description": "Validate code owner review requirements are enabled"
+    },
+    "checks": [
+      {
+        "id": "check-SC-CODE-05.01",
+        "description": "Verify code owner review is required"
+      }
+    ]
+  }
+]
