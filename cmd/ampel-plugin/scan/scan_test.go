@@ -225,9 +225,9 @@ func TestScanRepository_MockSuccess(t *testing.T) {
 		snappyOutput: attestation,
 		ampelOutput:  ampelOutput,
 	}
-	repo := targets.TargetRepository{
+	repo := RepoTarget{
 		URL:      "https://github.com/myorg/myrepo",
-		Branches: []string{"main"},
+		Platform: "github",
 	}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
@@ -263,9 +263,9 @@ func TestScanRepository_GitLabSupported(t *testing.T) {
 		snappyOutput: attestation,
 		ampelOutput:  ampelOutput,
 	}
-	repo := targets.TargetRepository{
+	repo := RepoTarget{
 		URL:      "https://gitlab.com/myorg/myrepo",
-		Branches: []string{"main"},
+		Platform: "gitlab",
 	}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
@@ -283,7 +283,7 @@ func TestScanRepository_SnappyError(t *testing.T) {
 	runner := &mockRunner{
 		snappyErr: fmt.Errorf("exec: \"snappy\": executable file not found in $PATH"),
 	}
-	repo := targets.TargetRepository{URL: "https://github.com/myorg/myrepo"}
+	repo := RepoTarget{URL: "https://github.com/myorg/myrepo", Platform: "github"}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
 		OutputDir:  t.TempDir(),
@@ -304,7 +304,7 @@ func TestScanRepository_AmpelExitError_SavesResult(t *testing.T) {
 		ampelOutput:  ampelOutput,
 		ampelErr:     &exec.ExitError{ProcessState: nil},
 	}
-	repo := targets.TargetRepository{URL: "https://github.com/myorg/myrepo"}
+	repo := RepoTarget{URL: "https://github.com/myorg/myrepo", Platform: "github"}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
 		OutputDir:  tmpDir,
@@ -330,7 +330,7 @@ func TestScanRepository_AmpelNonExecError(t *testing.T) {
 		snappyOutput: makeTestAttestation("abc123"),
 		ampelErr:     fmt.Errorf("exec: \"ampel\": executable file not found in $PATH"),
 	}
-	repo := targets.TargetRepository{URL: "https://github.com/myorg/myrepo"}
+	repo := RepoTarget{URL: "https://github.com/myorg/myrepo", Platform: "github"}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
 		OutputDir:  t.TempDir(),
@@ -347,7 +347,7 @@ func TestScanRepository_InvalidAttestationHash(t *testing.T) {
 	runner := &mockRunner{
 		snappyOutput: []byte(`{"_type":"statement","subject":[]}`),
 	}
-	repo := targets.TargetRepository{URL: "https://github.com/myorg/myrepo"}
+	repo := RepoTarget{URL: "https://github.com/myorg/myrepo", Platform: "github"}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
 		OutputDir:  t.TempDir(),
@@ -368,10 +368,10 @@ func TestScanRepository_WithAccessToken_GitHub(t *testing.T) {
 		snappyOutput: attestation,
 		ampelOutput:  ampelOutput,
 	}
-	repo := targets.TargetRepository{
+	repo := RepoTarget{
 		URL:         "https://github.com/myorg/myrepo",
-		Branches:    []string{"main"},
 		AccessToken: "ghp_testtoken123",
+		Platform:    "github",
 	}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
@@ -404,10 +404,10 @@ func TestScanRepository_WithAccessToken_GitLab(t *testing.T) {
 		snappyOutput: attestation,
 		ampelOutput:  ampelOutput,
 	}
-	repo := targets.TargetRepository{
+	repo := RepoTarget{
 		URL:         "https://gitlab.com/myorg/myrepo",
-		Branches:    []string{"main"},
 		AccessToken: "glpat-testtoken",
+		Platform:    "gitlab",
 	}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",
@@ -440,9 +440,9 @@ func TestScanRepository_NoAccessToken_UsesRun(t *testing.T) {
 		snappyOutput: attestation,
 		ampelOutput:  ampelOutput,
 	}
-	repo := targets.TargetRepository{
+	repo := RepoTarget{
 		URL:      "https://github.com/myorg/myrepo",
-		Branches: []string{"main"},
+		Platform: "github",
 	}
 	cfg := ScanConfig{
 		PolicyPath: "/policy.json",

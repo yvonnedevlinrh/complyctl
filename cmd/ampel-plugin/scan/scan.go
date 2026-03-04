@@ -16,6 +16,13 @@ import (
 	"github.com/complytime/complyctl/cmd/ampel-plugin/targets"
 )
 
+// RepoTarget holds the repository information extracted from target variables.
+type RepoTarget struct {
+	URL         string
+	AccessToken string
+	Platform    string // "github" or "gitlab"
+}
+
 //go:embed specs/github/branch-rules.yaml
 var githubBranchRulesSpec []byte
 
@@ -58,11 +65,10 @@ func (r ExecRunner) RunWithEnv(env []string, name string, args ...string) ([]byt
 
 // buildTokenEnv creates a copy of the current environment with the
 // appropriate platform-specific token variable set for the given repository.
-// For github.com repos it sets GITHUB_TOKEN; for gitlab.com repos it sets GITLAB_TOKEN.
-func buildTokenEnv(repo targets.TargetRepository) []string {
-	platform, _, _, _ := targets.ParseRepoURL(repo.URL)
+// For github repos it sets GITHUB_TOKEN; for gitlab repos it sets GITLAB_TOKEN.
+func buildTokenEnv(repo RepoTarget) []string {
 	tokenVar := "GITHUB_TOKEN" //nolint:gosec // env var name, not a credential
-	if platform == "gitlab" {
+	if repo.Platform == "gitlab" {
 		tokenVar = "GITLAB_TOKEN"
 	}
 
@@ -196,10 +202,10 @@ func extractHashFromStatement(data []byte) (string, error) {
 
 // ScanRepository runs snappy and ampel verify for a single repository, branch,
 // and spec file. The specPath must already be resolved (see ResolveSpecPath).
-func ScanRepository(repo targets.TargetRepository, branch, specPath string, cfg ScanConfig, runner CommandRunner) (*RawScanResult, error) {
+func ScanRepository(repo RepoTarget, branch, specPath string, cfg ScanConfig, runner CommandRunner) (*RawScanResult, error) {
 	logger := hclog.Default()
 
-	_, org, repoName, err := targets.ParseRepoURL(repo.URL)
+	_, org, repoName, err := targets.ParseRepoURL(repo.URL, repo.Platform)
 	if err != nil {
 		return nil, fmt.Errorf("parsing repository URL: %w", err)
 	}

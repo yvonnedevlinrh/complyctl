@@ -4,7 +4,6 @@ package complytime
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -17,9 +16,6 @@ var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 // unsafeRefChars matches characters that should never appear in an OCI reference
 // and are commonly used for shell injection.
 var unsafeRefChars = regexp.MustCompile("[;|&$`!><(){}\\[\\]\\\\]")
-
-// safeBranchPattern matches valid git branch names.
-var safeBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
 
 // ValidateOCIRef checks that raw looks like a valid OCI reference
 // (registry/repository with optional :tag or @version). It rejects empty
@@ -79,21 +75,12 @@ func (p PolicyEntry) EffectiveID() string {
 	return segments[len(segments)-1]
 }
 
-// Repository defines a Git repository to scan, with optional per-repo credentials.
-type Repository struct {
-	URL         string   `yaml:"url"              json:"url"`
-	Branches    []string `yaml:"branches"         json:"branches"`
-	Specs       []string `yaml:"specs,omitempty"   json:"specs,omitempty"`
-	AccessToken string   `yaml:"access_token,omitempty" json:"access_token,omitempty"` //nolint:gosec // G117: env var name, not a credential
-}
-
 // TargetConfig binds a scan target to one or more policies with optional variables.
 // Policies are referenced by their effective ID (explicit or derived).
 type TargetConfig struct {
-	ID           string            `yaml:"id"`
-	Policies     []string          `yaml:"policies"`
-	Variables    map[string]string `yaml:"variables,omitempty"`
-	Repositories []Repository      `yaml:"repositories,omitempty"`
+	ID        string            `yaml:"id"`
+	Policies  []string          `yaml:"policies"`
+	Variables map[string]string `yaml:"variables,omitempty"`
 }
 
 // PolicyRef represents a parsed OCI policy reference.
@@ -187,9 +174,9 @@ func LoadFrom(configPath string) (*WorkspaceConfig, error) {
 	return &config, nil
 }
 
-// resolveEnvVars expands ${VAR} references in target variable values and
-// repository access tokens from the process environment. Returns an error
-// if a referenced variable is not set.
+// resolveEnvVars expands ${VAR} references in target variable values
+// from the process environment. Returns an error if a referenced
+// variable is not set.
 func resolveEnvVars(config *WorkspaceConfig) error {
 	for i, target := range config.Targets {
 		for key, val := range target.Variables {
@@ -198,16 +185,6 @@ func resolveEnvVars(config *WorkspaceConfig) error {
 				return fmt.Errorf("targets[%s].variables.%s: %w", target.ID, key, err)
 			}
 			config.Targets[i].Variables[key] = resolved
-		}
-		for j, repo := range target.Repositories {
-			if repo.AccessToken == "" {
-				continue
-			}
-			resolved, err := expandEnvRef(repo.AccessToken)
-			if err != nil {
-				return fmt.Errorf("targets[%s].repositories[%d].access_token: %w", target.ID, j, err)
-			}
-			config.Targets[i].Repositories[j].AccessToken = resolved
 		}
 	}
 	return nil
@@ -229,68 +206,6 @@ func expandEnvRef(s string) (string, error) {
 		return "", fmt.Errorf("unset environment variable(s): %s", strings.Join(missing, ", "))
 	}
 	return result, nil
-}
-
-// validateRepository checks that all fields of a Repository are safe and well-formed.
-func validateRepository(repo Repository, targetID string, idx int) error {
-	prefix := fmt.Sprintf("targets[%s].repositories[%d]", targetID, idx)
-
-	// URL: must be HTTPS, must point to github.com or gitlab.com
-	if repo.URL == "" {
-		return fmt.Errorf("%s: url cannot be empty", prefix)
-	}
-	if unsafeRefChars.MatchString(repo.URL) {
-		return fmt.Errorf("%s: url contains invalid characters: %s", prefix, repo.URL)
-	}
-	parsed, err := url.Parse(repo.URL)
-	if err != nil {
-		return fmt.Errorf("%s: invalid url %q: %w", prefix, repo.URL, err)
-	}
-	if parsed.Scheme != "https" {
-		return fmt.Errorf("%s: url %q must use HTTPS scheme", prefix, repo.URL)
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if !strings.Contains(host, "github.com") && !strings.Contains(host, "gitlab.com") {
-		return fmt.Errorf("%s: url %q must point to a GitHub or GitLab host", prefix, repo.URL)
-	}
-
-	// Branches: non-empty, safe characters
-	if len(repo.Branches) == 0 {
-		return fmt.Errorf("%s: branches list must not be empty", prefix)
-	}
-	for _, branch := range repo.Branches {
-		if branch == "" {
-			return fmt.Errorf("%s: branch name cannot be empty", prefix)
-		}
-		if !safeBranchPattern.MatchString(branch) {
-			return fmt.Errorf("%s: branch name contains invalid characters: %q", prefix, branch)
-		}
-		if strings.Contains(branch, "..") {
-			return fmt.Errorf("%s: branch name contains path traversal: %q", prefix, branch)
-		}
-	}
-
-	// Specs: non-empty values, no shell metacharacters, no path traversal
-	for _, spec := range repo.Specs {
-		if spec == "" {
-			return fmt.Errorf("%s: spec cannot be empty", prefix)
-		}
-		if unsafeRefChars.MatchString(spec) {
-			return fmt.Errorf("%s: spec contains invalid characters: %q", prefix, spec)
-		}
-		if strings.Contains(spec, "..") {
-			return fmt.Errorf("%s: spec contains path traversal: %q", prefix, spec)
-		}
-	}
-
-	// AccessToken: reject newlines and null bytes (header/env injection)
-	if repo.AccessToken != "" {
-		if strings.ContainsAny(repo.AccessToken, "\n\r\x00") {
-			return fmt.Errorf("%s: access_token contains invalid characters (newline or null byte)", prefix)
-		}
-	}
-
-	return nil
 }
 
 // SaveTo writes complytime configuration to the given path.
@@ -361,11 +276,6 @@ func Validate(config *WorkspaceConfig) error {
 				return fmt.Errorf("targets[%s]: duplicate policy %s", target.ID, pid)
 			}
 			seenTargetPolicies[pid] = true
-		}
-		for i, repo := range target.Repositories {
-			if err := validateRepository(repo, target.ID, i); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

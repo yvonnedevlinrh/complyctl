@@ -2,10 +2,10 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
@@ -26,6 +26,9 @@ var ScanRunner scan.CommandRunner = scan.ExecRunner{}
 // SkipToolCheck disables tool presence validation. Used in tests.
 var SkipToolCheck bool
 
+// safeBranchPattern matches valid git branch names.
+var safeBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
+
 var _ plugin.Plugin = (*PluginServer)(nil)
 
 // PluginServer implements the plugin.Plugin interface for the AMPEL plugin.
@@ -41,7 +44,7 @@ func (s *PluginServer) Describe(_ context.Context, _ *plugin.DescribeRequest) (*
 	return &plugin.DescribeResponse{
 		Healthy:                 true,
 		Version:                 "0.1.0",
-		RequiredTargetVariables: []string{},
+		RequiredTargetVariables: []string{"url", "specs"},
 	}, nil
 }
 
@@ -146,72 +149,82 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 	var repoResults []*results.PerRepoResult
 
 	for _, target := range req.Targets {
-		reposJSON, ok := target.Variables["repositories"]
-		if !ok || reposJSON == "" {
-			return nil, fmt.Errorf("target %q: missing or empty 'repositories' variable", target.TargetID)
+		repoURL := target.Variables["url"]
+		if repoURL == "" {
+			return nil, fmt.Errorf("target %q: missing required variable 'url'", target.TargetID)
 		}
 
-		var repos []targets.TargetRepository
-		if err := json.Unmarshal([]byte(reposJSON), &repos); err != nil {
-			return nil, fmt.Errorf("target %q: failed to parse repositories: %w", target.TargetID, err)
+		specsStr := target.Variables["specs"]
+		if specsStr == "" {
+			return nil, fmt.Errorf("target %q: missing required variable 'specs'", target.TargetID)
 		}
 
-		if len(repos) == 0 {
-			return nil, fmt.Errorf("target %q: repositories list is empty", target.TargetID)
+		branchesStr := target.Variables["branches"]
+		if branchesStr == "" {
+			branchesStr = "main"
 		}
 
-		// Defense-in-depth: validate repository entries on the plugin side
-		for i, repo := range repos {
-			if err := validatePluginRepoEntry(repo, target.TargetID, i); err != nil {
-				return nil, err
-			}
+		accessToken := target.Variables["access_token"]
+		platformHint := target.Variables["platform"]
+
+		branches := splitCSV(branchesStr)
+		specs := splitCSV(specsStr)
+
+		// Defense-in-depth: validate target variables on the plugin side
+		if err := validateTargetVariables(repoURL, branches, specs, accessToken, target.TargetID); err != nil {
+			return nil, err
 		}
 
-		for _, repo := range repos {
-			if len(repo.Specs) == 0 {
-				logger.Warn("skipping repository with no specs defined", "url", repo.URL)
-				continue
-			}
+		// Validate and detect platform
+		platform, _, _, err := targets.ParseRepoURL(repoURL, platformHint)
+		if err != nil {
+			return nil, fmt.Errorf("target %q: %w", target.TargetID, err)
+		}
 
-			for _, branch := range repo.Branches {
-				for _, specRef := range repo.Specs {
-					specPath := scan.ResolveSpecPath(specRef, scanCfg.SpecDir)
-					logger.Info("scanning repository", "url", repo.URL, "branch", branch, "spec", specRef)
+		repo := scan.RepoTarget{
+			URL:         repoURL,
+			AccessToken: accessToken,
+			Platform:    platform,
+		}
 
-					rawResult, err := scan.ScanRepository(repo, branch, specPath, scanCfg, ScanRunner)
-					if err != nil {
-						logger.Error("scan failed", "repo", repo.URL, "branch", branch, "spec", specRef, "error", err)
-						errResult := &results.PerRepoResult{
-							Repository: repo.URL,
-							Branch:     branch,
-							Status:     "error",
-							Error:      err.Error(),
-						}
-						repoResults = append(repoResults, errResult)
-						if writeErr := results.WritePerRepoResult(errResult, resultsDir); writeErr != nil {
-							logger.Error("failed to write error result", "error", writeErr)
-						}
-						continue
+		for _, branch := range branches {
+			for _, specRef := range specs {
+				specPath := scan.ResolveSpecPath(specRef, scanCfg.SpecDir)
+				logger.Info("scanning repository", "url", repoURL, "branch", branch, "spec", specRef)
+
+				rawResult, err := scan.ScanRepository(repo, branch, specPath, scanCfg, ScanRunner)
+				if err != nil {
+					logger.Error("scan failed", "repo", repoURL, "branch", branch, "spec", specRef, "error", err)
+					errResult := &results.PerRepoResult{
+						Repository: repoURL,
+						Branch:     branch,
+						Status:     "error",
+						Error:      err.Error(),
 					}
-
-					parsed, err := results.ParseAmpelOutput(rawResult.Output, repo.URL, branch)
-					if err != nil {
-						logger.Error("failed to parse scan output", "repo", repo.URL, "error", err)
-						errResult := &results.PerRepoResult{
-							Repository: repo.URL,
-							Branch:     branch,
-							Status:     "error",
-							Error:      err.Error(),
-						}
-						repoResults = append(repoResults, errResult)
-						if writeErr := results.WritePerRepoResult(errResult, resultsDir); writeErr != nil {
-							logger.Error("failed to write error result", "error", writeErr)
-						}
-						continue
+					repoResults = append(repoResults, errResult)
+					if writeErr := results.WritePerRepoResult(errResult, resultsDir); writeErr != nil {
+						logger.Error("failed to write error result", "error", writeErr)
 					}
-
-					repoResults = append(repoResults, parsed)
+					continue
 				}
+
+				parsed, err := results.ParseAmpelOutput(rawResult.Output, repoURL, branch)
+				if err != nil {
+					logger.Error("failed to parse scan output", "repo", repoURL, "error", err)
+					errResult := &results.PerRepoResult{
+						Repository: repoURL,
+						Branch:     branch,
+						Status:     "error",
+						Error:      err.Error(),
+					}
+					repoResults = append(repoResults, errResult)
+					if writeErr := results.WritePerRepoResult(errResult, resultsDir); writeErr != nil {
+						logger.Error("failed to write error result", "error", writeErr)
+					}
+					continue
+				}
+
+				repoResults = append(repoResults, parsed)
 			}
 		}
 	}
@@ -221,37 +234,58 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 	return scanResponse, nil
 }
 
-// validatePluginRepoEntry performs defense-in-depth validation of a repository
-// entry received via the variables JSON. This catches issues even if the CLI
-// validation was bypassed.
-func validatePluginRepoEntry(repo targets.TargetRepository, targetID string, idx int) error {
-	prefix := fmt.Sprintf("target %q repository %d", targetID, idx)
-
-	if repo.URL == "" {
-		return fmt.Errorf("%s: url cannot be empty", prefix)
+// splitCSV splits a comma-separated string into trimmed, non-empty parts.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
 	}
+	return result
+}
 
-	parsed, err := url.Parse(repo.URL)
+// validateTargetVariables performs defense-in-depth validation of target
+// variable values received from the CLI. This catches issues even if the
+// CLI validation was bypassed.
+func validateTargetVariables(repoURL string, branches, specs []string, accessToken, targetID string) error {
+	prefix := fmt.Sprintf("target %q", targetID)
+
+	// URL: must be HTTPS, valid structure
+	parsed, err := url.Parse(repoURL)
 	if err != nil {
-		return fmt.Errorf("%s: invalid url %q: %w", prefix, repo.URL, err)
+		return fmt.Errorf("%s: invalid url %q: %w", prefix, repoURL, err)
 	}
 	if parsed.Scheme != "https" {
-		return fmt.Errorf("%s: url %q must use HTTPS scheme", prefix, repo.URL)
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if !strings.Contains(host, "github.com") && !strings.Contains(host, "gitlab.com") {
-		return fmt.Errorf("%s: url %q must point to a GitHub or GitLab host", prefix, repo.URL)
+		return fmt.Errorf("%s: url %q must use HTTPS scheme", prefix, repoURL)
 	}
 
-	if len(repo.Branches) == 0 {
-		return fmt.Errorf("%s: branches list must not be empty", prefix)
-	}
-	for _, branch := range repo.Branches {
-		if strings.ContainsAny(branch, ";|&$`!><()") {
+	// Branches: safe characters, no path traversal
+	for _, branch := range branches {
+		if !safeBranchPattern.MatchString(branch) {
 			return fmt.Errorf("%s: branch name contains invalid characters: %q", prefix, branch)
 		}
 		if strings.Contains(branch, "..") {
 			return fmt.Errorf("%s: branch name contains path traversal: %q", prefix, branch)
+		}
+	}
+
+	// Specs: non-empty, no path traversal
+	for _, spec := range specs {
+		if spec == "" {
+			return fmt.Errorf("%s: spec cannot be empty", prefix)
+		}
+		if strings.Contains(spec, "..") {
+			return fmt.Errorf("%s: spec contains path traversal: %q", prefix, spec)
+		}
+	}
+
+	// AccessToken: reject newlines and null bytes
+	if accessToken != "" {
+		if strings.ContainsAny(accessToken, "\n\r\x00") {
+			return fmt.Errorf("%s: access_token contains invalid characters (newline or null byte)", prefix)
 		}
 	}
 

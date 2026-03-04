@@ -13,7 +13,6 @@ import (
 	"github.com/complytime/complyctl/cmd/ampel-plugin/config"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/convert"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/scan"
-	"github.com/complytime/complyctl/cmd/ampel-plugin/targets"
 	"github.com/complytime/complyctl/cmd/ampel-plugin/toolcheck"
 	"github.com/complytime/complyctl/internal/complytime"
 	"github.com/complytime/complyctl/pkg/plugin"
@@ -132,15 +131,6 @@ func setupServer(t *testing.T) (*PluginServer, string) {
 	return s, dir
 }
 
-// makeReposJSON marshals a list of target repositories to JSON for use in
-// target variables.
-func makeReposJSON(t *testing.T, repos []targets.TargetRepository) string {
-	t.Helper()
-	data, err := json.Marshal(repos)
-	require.NoError(t, err)
-	return string(data)
-}
-
 // setupServerWithGenerate creates a server and runs Generate to prepare
 // policy artifacts for scanning.
 func setupServerWithGenerate(t *testing.T) (*PluginServer, string) {
@@ -165,7 +155,7 @@ func TestDescribe_Healthy(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Healthy)
 	require.Equal(t, "0.1.0", resp.Version)
-	require.Empty(t, resp.RequiredTargetVariables)
+	require.Equal(t, []string{"url", "specs"}, resp.RequiredTargetVariables)
 }
 
 // --- Generate tests (US1) ---
@@ -325,18 +315,11 @@ func TestScan_ValidTargets(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
-	repos := []targets.TargetRepository{
-		{
-			URL:      "https://github.com/myorg/repo1",
-			Branches: []string{"main"},
-			Specs:    []string{"builtin:github/branch-rules.yaml"},
-		},
-	}
-
 	resp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{
-				"repositories": makeReposJSON(t, repos),
+			{TargetID: "myorg-repo1", Variables: map[string]string{
+				"url":   "https://github.com/myorg/repo1",
+				"specs": "builtin:github/branch-rules.yaml",
 			}},
 		},
 	})
@@ -351,41 +334,25 @@ func TestScan_ValidTargets(t *testing.T) {
 	require.Len(t, files, 2) // snappy attestation + ampel intoto result
 }
 
-func TestScan_NoSpecs_SkipsRepo(t *testing.T) {
+func TestScan_EmptySpecs_ReturnsError(t *testing.T) {
 	s, _ := setupServerWithGenerate(t)
-
-	ampelOutput := makeAmpelResultAttestation()
 
 	origRunner := ScanRunner
 	ScanRunner = &mockScanRunner{
 		snappyOutput: makeTestAttestation(),
-		ampelOutput:  ampelOutput,
+		ampelOutput:  []byte("{}"),
 	}
 	defer func() { ScanRunner = origRunner }()
 
-	repos := []targets.TargetRepository{
-		{
-			URL:      "https://github.com/myorg/repo-no-specs",
-			Branches: []string{"main"},
-		},
-		{
-			URL:      "https://github.com/myorg/repo-with-specs",
-			Branches: []string{"main"},
-			Specs:    []string{"builtin:github/branch-rules.yaml"},
-		},
-	}
-
-	scanResp, err := s.Scan(context.Background(), &plugin.ScanRequest{
+	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{
-				"repositories": makeReposJSON(t, repos),
+			{TargetID: "myorg-repo1", Variables: map[string]string{
+				"url": "https://github.com/myorg/repo1",
 			}},
 		},
 	})
-	require.NoError(t, err)
-	// Only repo-with-specs should be scanned; repo-no-specs is skipped
-	require.Len(t, scanResp.Assessments, 1)
-	require.Equal(t, plugin.ResultPassed, scanResp.Assessments[0].Steps[0].Result)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing required variable 'specs'")
 }
 
 func TestScan_MultipleSpecs(t *testing.T) {
@@ -400,18 +367,11 @@ func TestScan_MultipleSpecs(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
-	repos := []targets.TargetRepository{
-		{
-			URL:      "https://github.com/myorg/repo1",
-			Branches: []string{"main"},
-			Specs:    []string{"github/branch-rules.yaml", "github/custom-check.yaml"},
-		},
-	}
-
 	scanResp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{
-				"repositories": makeReposJSON(t, repos),
+			{TargetID: "myorg-repo1", Variables: map[string]string{
+				"url":   "https://github.com/myorg/repo1",
+				"specs": "github/branch-rules.yaml,github/custom-check.yaml",
 			}},
 		},
 	})
@@ -432,7 +392,7 @@ func TestScan_ScanError_ContinuesScanning(t *testing.T) {
 
 	ampelOutput := makeAmpelResultAttestation()
 
-	// Mock runner that fails for first repo's snappy call, succeeds for second
+	// Mock runner that fails for first target's snappy call, succeeds for second
 	callCount := 0
 	origRunner := ScanRunner
 	ScanRunner = &mockCallCountRunner{
@@ -443,23 +403,15 @@ func TestScan_ScanError_ContinuesScanning(t *testing.T) {
 	}
 	defer func() { ScanRunner = origRunner }()
 
-	repos := []targets.TargetRepository{
-		{
-			URL:      "https://github.com/myorg/repo1",
-			Branches: []string{"main"},
-			Specs:    []string{"builtin:github/branch-rules.yaml"},
-		},
-		{
-			URL:      "https://github.com/myorg/repo2",
-			Branches: []string{"main"},
-			Specs:    []string{"builtin:github/branch-rules.yaml"},
-		},
-	}
-
 	scanResp, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{
-				"repositories": makeReposJSON(t, repos),
+			{TargetID: "myorg-repo1", Variables: map[string]string{
+				"url":   "https://github.com/myorg/repo1",
+				"specs": "builtin:github/branch-rules.yaml",
+			}},
+			{TargetID: "myorg-repo2", Variables: map[string]string{
+				"url":   "https://github.com/myorg/repo2",
+				"specs": "builtin:github/branch-rules.yaml",
 			}},
 		},
 	})
@@ -485,7 +437,7 @@ func (m *mockCallCountRunner) RunWithEnv(_ []string, name string, args ...string
 
 func (m *mockCallCountRunner) run(name string, args ...string) ([]byte, error) {
 	*m.callCount++
-	// Fail on the snappy call for the first repo
+	// Fail on the snappy call for the first target
 	if *m.callCount <= 1 && m.failOnCall == 1 {
 		return nil, fmt.Errorf("connection refused")
 	}
@@ -502,7 +454,7 @@ func (m *mockCallCountRunner) run(name string, args ...string) ([]byte, error) {
 	return nil, nil
 }
 
-func TestScan_MissingRepositoriesVariable(t *testing.T) {
+func TestScan_MissingURLVariable(t *testing.T) {
 	s, _ := setupServerWithGenerate(t)
 
 	origRunner := ScanRunner
@@ -514,11 +466,133 @@ func TestScan_MissingRepositoriesVariable(t *testing.T) {
 
 	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
 		Targets: []plugin.Target{
-			{TargetID: "github-repos", Variables: map[string]string{}},
+			{TargetID: "test", Variables: map[string]string{
+				"specs": "builtin:github/branch-rules.yaml",
+			}},
 		},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing or empty 'repositories'")
+	require.Contains(t, err.Error(), "missing required variable 'url'")
+}
+
+func TestScan_MissingSpecsVariable(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
+
+	origRunner := ScanRunner
+	ScanRunner = &mockScanRunner{
+		snappyOutput: makeTestAttestation(),
+		ampelOutput:  []byte("{}"),
+	}
+	defer func() { ScanRunner = origRunner }()
+
+	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
+		Targets: []plugin.Target{
+			{TargetID: "test", Variables: map[string]string{
+				"url": "https://github.com/myorg/repo1",
+			}},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing required variable 'specs'")
+}
+
+func TestScan_BranchesDefault(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
+
+	ampelOutput := makeAmpelResultAttestation()
+
+	origRunner := ScanRunner
+	ScanRunner = &mockScanRunner{
+		snappyOutput: makeTestAttestation(),
+		ampelOutput:  ampelOutput,
+	}
+	defer func() { ScanRunner = origRunner }()
+
+	resp, err := s.Scan(context.Background(), &plugin.ScanRequest{
+		Targets: []plugin.Target{
+			{TargetID: "myorg-repo1", Variables: map[string]string{
+				"url":   "https://github.com/myorg/repo1",
+				"specs": "builtin:github/branch-rules.yaml",
+				// branches omitted — should default to "main"
+			}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Assessments, 1)
+}
+
+func TestScan_CommaSeparatedBranches(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
+
+	ampelOutput := makeAmpelResultAttestation()
+
+	origRunner := ScanRunner
+	ScanRunner = &mockScanRunner{
+		snappyOutput: makeTestAttestation(),
+		ampelOutput:  ampelOutput,
+	}
+	defer func() { ScanRunner = origRunner }()
+
+	resp, err := s.Scan(context.Background(), &plugin.ScanRequest{
+		Targets: []plugin.Target{
+			{TargetID: "myorg-repo1", Variables: map[string]string{
+				"url":      "https://github.com/myorg/repo1",
+				"specs":    "builtin:github/branch-rules.yaml",
+				"branches": "main,develop",
+			}},
+		},
+	})
+	require.NoError(t, err)
+	// 2 branches × 1 spec = 2 scan results, merged into assessments
+	require.NotEmpty(t, resp.Assessments)
+}
+
+func TestScan_PlatformHintVariable(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
+
+	ampelOutput := makeAmpelResultAttestation()
+
+	origRunner := ScanRunner
+	ScanRunner = &mockScanRunner{
+		snappyOutput: makeTestAttestation(),
+		ampelOutput:  ampelOutput,
+	}
+	defer func() { ScanRunner = origRunner }()
+
+	resp, err := s.Scan(context.Background(), &plugin.ScanRequest{
+		Targets: []plugin.Target{
+			{TargetID: "corp-repo", Variables: map[string]string{
+				"url":      "https://git.corp.com/myorg/repo1",
+				"specs":    "builtin:github/branch-rules.yaml",
+				"platform": "github",
+			}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Assessments, 1)
+}
+
+func TestScan_BranchValidation(t *testing.T) {
+	s, _ := setupServerWithGenerate(t)
+
+	origRunner := ScanRunner
+	ScanRunner = &mockScanRunner{
+		snappyOutput: makeTestAttestation(),
+		ampelOutput:  []byte("{}"),
+	}
+	defer func() { ScanRunner = origRunner }()
+
+	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
+		Targets: []plugin.Target{
+			{TargetID: "test", Variables: map[string]string{
+				"url":      "https://github.com/myorg/repo1",
+				"specs":    "builtin:github/branch-rules.yaml",
+				"branches": "main;rm -rf /",
+			}},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid characters")
 }
 
 func TestScan_EmptyTargets(t *testing.T) {
@@ -528,48 +602,6 @@ func TestScan_EmptyTargets(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no targets")
-}
-
-func TestScan_InvalidRepositoriesJSON(t *testing.T) {
-	s, _ := setupServerWithGenerate(t)
-
-	origRunner := ScanRunner
-	ScanRunner = &mockScanRunner{
-		snappyOutput: makeTestAttestation(),
-		ampelOutput:  []byte("{}"),
-	}
-	defer func() { ScanRunner = origRunner }()
-
-	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
-		Targets: []plugin.Target{
-			{TargetID: "test", Variables: map[string]string{
-				"repositories": "not-json",
-			}},
-		},
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to parse repositories")
-}
-
-func TestScan_EmptyRepositoriesList(t *testing.T) {
-	s, _ := setupServerWithGenerate(t)
-
-	origRunner := ScanRunner
-	ScanRunner = &mockScanRunner{
-		snappyOutput: makeTestAttestation(),
-		ampelOutput:  []byte("{}"),
-	}
-	defer func() { ScanRunner = origRunner }()
-
-	_, err := s.Scan(context.Background(), &plugin.ScanRequest{
-		Targets: []plugin.Target{
-			{TargetID: "test", Variables: map[string]string{
-				"repositories": "[]",
-			}},
-		},
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "repositories list is empty")
 }
 
 // Tool check integration tests

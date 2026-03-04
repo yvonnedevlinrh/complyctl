@@ -2,34 +2,36 @@
 
 ## Overview
 
-The ampel-plugin reads its target repository configuration directly from `complytime.yaml`. Repositories to scan are defined inline under each target entry using the `repositories` field. This centralizes all configuration in a single file and supports per-repository authentication tokens.
+The ampel-plugin reads its target repository configuration directly from `complytime.yaml`. Each repository to scan is defined as its own target entry with repository details passed as plain string variables. Multi-value fields use comma-separated strings.
 
 ## Configuration Reference
 
-### Target repositories
+### Target variables
 
-Each target in `complytime.yaml` can include a `repositories` list:
+Each target in `complytime.yaml` uses the `variables` map to specify repository details:
 
 ```yaml
 targets:
   - id: <target-id>
     policies:
       - <policy-id>
-    repositories:
-      - url: <repository-url>          # required, HTTPS URL to GitHub or GitLab
-        branches: [<branch>, ...]      # required, list of branches to scan
-        specs: [<spec-ref>, ...]       # required for scanning, snappy spec references
-        access_token: <token>          # optional, per-repo auth token
+    variables:
+      url: <repository-url>              # required, HTTPS URL to repository
+      specs: <spec-refs>                 # required, comma-separated snappy spec references
+      branches: <branch-names>           # optional, comma-separated (default: main)
+      access_token: <token>              # optional, supports ${VAR} expansion
+      platform: <platform>              # optional, github or gitlab (for self-hosted)
 ```
 
-### Field details
+### Variable reference
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `url` | Yes | HTTPS URL to a GitHub or GitLab repository (e.g., `https://github.com/myorg/repo`) |
-| `branches` | Yes | List of branch names to scan. Must be non-empty. |
-| `specs` | Yes (for scanning) | List of snappy spec file references. Use `builtin:` prefix for embedded specs. Repositories without specs are skipped during scan. |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `url` | Yes | HTTPS URL to a repository (e.g., `https://github.com/myorg/repo`) |
+| `specs` | Yes | Comma-separated snappy spec file references. Use `builtin:` prefix for embedded specs. |
+| `branches` | No | Comma-separated branch names to scan (default: `main`) |
 | `access_token` | No | Authentication token for this repository. Supports `${VAR}` env var expansion. |
+| `platform` | No | `github` or `gitlab`. Required for self-hosted instances; auto-detected for `github.com` and `gitlab.com`. |
 
 ### Granular policy directory
 
@@ -45,7 +47,7 @@ variables:
 
 ## Examples
 
-### GitHub repositories
+### Single GitHub repository
 
 ```yaml
 policies:
@@ -53,20 +55,18 @@ policies:
     id: branch-protection
 
 targets:
-  - id: github-repos
+  - id: myorg-frontend
     policies:
       - branch-protection
-    repositories:
-      - url: https://github.com/myorg/frontend
-        branches: [main, develop]
-        specs: [builtin:github/branch-rules.yaml]
-      - url: https://github.com/myorg/backend
-        branches: [main]
-        specs: [builtin:github/branch-rules.yaml]
-        access_token: ${BACKEND_GITHUB_TOKEN}
+    variables:
+      url: https://github.com/myorg/frontend
+      specs: builtin:github/branch-rules.yaml
+      branches: main,develop
 ```
 
-### GitLab repositories
+### Multiple repositories
+
+Each repository is its own target entry:
 
 ```yaml
 policies:
@@ -74,48 +74,56 @@ policies:
     id: branch-protection
 
 targets:
-  - id: gitlab-repos
+  - id: myorg-frontend
     policies:
       - branch-protection
-    repositories:
-      - url: https://gitlab.com/myorg/infrastructure
-        branches: [main, release]
-        specs: [builtin:github/branch-rules.yaml]
-        access_token: ${GITLAB_API_TOKEN}
+    variables:
+      url: https://github.com/myorg/frontend
+      specs: builtin:github/branch-rules.yaml
+      branches: main,develop
+
+  - id: myorg-backend
+    policies:
+      - branch-protection
+    variables:
+      url: https://github.com/myorg/backend
+      specs: builtin:github/branch-rules.yaml
+      access_token: ${BACKEND_GITHUB_TOKEN}
+
+  - id: myorg-infra
+    policies:
+      - branch-protection
+    variables:
+      url: https://gitlab.com/myorg/infrastructure
+      specs: builtin:github/branch-rules.yaml
+      branches: main,release
+      access_token: ${GITLAB_API_TOKEN}
 ```
 
-### Mixed platforms
+### Self-hosted instance
 
-A single target can scan repositories across both GitHub and GitLab, each with its own token:
+Use the `platform` variable to specify the platform for self-hosted Git servers:
 
 ```yaml
-policies:
-  - url: registry.example.com/policies/branch-protection@v1.0
-    id: branch-protection
-
 targets:
-  - id: all-repos
+  - id: corp-repo
     policies:
       - branch-protection
-    repositories:
-      - url: https://github.com/myorg/frontend
-        branches: [main]
-        specs: [builtin:github/branch-rules.yaml]
-        access_token: ${GITHUB_PAT}
-      - url: https://gitlab.com/myorg/infrastructure
-        branches: [main, release]
-        specs: [builtin:github/branch-rules.yaml]
-        access_token: ${GITLAB_API_TOKEN}
+    variables:
+      url: https://git.corp.com/myorg/repo
+      specs: builtin:github/branch-rules.yaml
+      platform: github
+      access_token: ${CORP_GIT_TOKEN}
 ```
 
 ## Token Authentication
 
 ### When `access_token` is set
 
-The token value is expanded from environment variables at config load time (e.g., `${MY_TOKEN}` reads the `MY_TOKEN` env var). During scanning, the plugin detects the platform from the repository URL and injects the token into the snappy subprocess environment:
+The token value is expanded from environment variables at config load time (e.g., `${MY_TOKEN}` reads the `MY_TOKEN` env var). During scanning, the plugin detects the platform and injects the token into the snappy subprocess environment:
 
-- `github.com` repositories: sets `GITHUB_TOKEN=<value>`
-- `gitlab.com` repositories: sets `GITLAB_TOKEN=<value>`
+- `github` platform: sets `GITHUB_TOKEN=<value>`
+- `gitlab` platform: sets `GITLAB_TOKEN=<value>`
 
 ### When `access_token` is omitted
 
@@ -125,8 +133,8 @@ Snappy inherits the parent process environment unchanged. It reads `GITHUB_TOKEN
 
 | Platform | Environment Variable |
 |----------|---------------------|
-| GitHub (`github.com`) | `GITHUB_TOKEN` |
-| GitLab (`gitlab.com`) | `GITLAB_TOKEN` |
+| GitHub | `GITHUB_TOKEN` |
+| GitLab | `GITLAB_TOKEN` |
 
 ### Security considerations
 
