@@ -15,15 +15,15 @@ ampel-plugin/
 ├── config/               # Package for plugin configuration
 │ ├── config_test.go      # Tests for functions in config.go
 │ └── config.go           # Main code used to process plugin configuration
-├── convert/              # Package to convert OSCAL rules to AMPEL policies
+├── convert/              # Package to match requirement rules to AMPEL policies
 │ ├── convert_test.go     # Tests for functions in convert.go
 │ ├── convert.go          # Main code used to match and merge AMPEL policies
 │ └── types.go            # AMPEL policy type definitions
 ├── docs/                 # Documentation and sample files
 │ └── samples/            # Sample configuration files
-├── results/              # Package to parse AMPEL results and map to OSCAL
+├── results/              # Package to parse AMPEL results and produce assessment logs
 │ ├── results_test.go     # Tests for functions in results.go
-│ └── results.go          # Main code used to parse AMPEL output and produce OSCAL observations
+│ └── results.go          # Main code used to parse AMPEL output and produce assessment logs
 ├── scan/                 # Package to execute snappy and ampel commands
 │ ├── scan_test.go        # Tests for functions in scan.go
 │ ├── scan.go             # Main code used to orchestrate repository scanning
@@ -83,7 +83,7 @@ See `docs/configuration.md` for comprehensive examples including mixed-platform 
 
 ### AMPEL Policies
 
-The plugin uses granular AMPEL policy files (one JSON file per control) stored in the granular policy directory (default: `{workspace}/ampel/granular-policies/`, configurable via the `ampel_policy_dir` global variable in `complytime.yaml`). During the `generate` phase, the plugin matches OSCAL assessment plan rules to these policies and merges the matched policies into a single bundle used for verification. Generated output is written to `{workspace}/ampel/policy/`.
+The plugin uses granular AMPEL policy files (one JSON file per control) stored in the granular policy directory (default: `{workspace}/ampel/granular-policies/`, configurable via the `ampel_policy_dir` global variable in `complytime.yaml`). During the `generate` phase, the plugin matches assessment configuration requirement IDs to these policies and merges the matched policies into a single bundle used for verification. Generated output is written to `{workspace}/ampel/policy/`.
 
 Sample policy files are available in the [complytime-demos](https://github.com/complytime/complytime-demos) repository under `base_ansible_env/files/ampel-policies/`.
 
@@ -91,7 +91,7 @@ Sample policy files are available in the [complytime-demos](https://github.com/c
 
 When the plugin receives the `generate` command from complyctl, it will:
 * Load granular AMPEL policy files from the configured `policy_dir`
-* Match OSCAL assessment plan rules to available AMPEL policies by rule ID
+* Match assessment configuration requirement IDs to available AMPEL policies
 * Merge matched policies into a single policy bundle
 * Write the bundle to `{workspace}/ampel/policy/complytime-ampel-policy.json`
 
@@ -106,7 +106,7 @@ When the plugin receives the `scan` command from complyctl, it will:
   * Run `ampel verify` to evaluate the attestation against the generated policy bundle
   * Parse the AMPEL verification results (supporting both raw and DSSE-wrapped attestations)
 * Write per-repository result files to the configured `results_dir`
-* Return OSCAL observations to complyctl so an `assessment-results.json` file can be created
+* Return assessment results to complyctl for inclusion in the compliance report
 
 ## Installation
 
@@ -219,7 +219,7 @@ ansible-playbook populate_complyctl_dev_binaries.yml
 
 This playbook builds complyctl from source, copies the binaries and plugin manifests, installs snappy and ampel via `go install`, and deploys the AMPEL policy files and targets configuration to the VM.
 
-4. Deploy the AMPEL OSCAL content (catalog, profile, and component definition):
+4. Deploy the AMPEL policy content (catalog, profile, and component definition):
 
 ```bash
 ansible-playbook populate_complyctl_dev_content_ampel.yml
