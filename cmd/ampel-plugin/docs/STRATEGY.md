@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The ampel-plugin extends complyctl to verify branch protection settings on GitHub repositories using [AMPEL](https://github.com/carabiner-dev/ampel) and [snappy](https://github.com/carabiner-dev/snappy). This document describes the key design decisions, the value proposition of this approach, and the next steps for the plugin.
+The ampel-plugin extends complyctl to verify branch protection settings on GitHub and GitLab repositories using [AMPEL](https://github.com/carabiner-dev/ampel) and [snappy](https://github.com/carabiner-dev/snappy). This document describes the key design decisions, the value proposition of this approach, and the next steps for the plugin.
 
 ## Granular AMPEL Policies
 

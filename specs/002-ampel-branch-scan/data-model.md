@@ -1,6 +1,6 @@
 # Data Model: AMPEL Branch Protection Scanning Plugin
 
-**Branch**: `001-ampel-branch-scan` | **Date**: 2026-02-11
+**Branch**: `002-ampel-branch-scan` | **Date**: 2026-02-11
 
 ## Entity Definitions
 
@@ -8,14 +8,15 @@
 
 Represents a single AMPEL verification policy for one control.
 Authored independently as a standalone JSON file in the policy
-directory. Multiple granular policies are matched against OSCAL
-rules and merged into a combined bundle during generate.
+directory. Multiple granular policies are matched against
+assessment requirement IDs and merged into a combined bundle
+during generate.
 
 **Fields**:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| ID | string | Policy identifier matching OSCAL rule ID (e.g., "BP-1.01") |
+| ID | string | Policy identifier matching assessment requirement ID (e.g., "BP-1.01") |
 | Meta | AmpelMeta | Policy metadata including description and control references |
 | Tenets | []AmpelTenet | CEL-based verification checks |
 
@@ -24,7 +25,7 @@ rules and merged into a combined bundle during generate.
 | Field | Type | Description |
 |-------|------|-------------|
 | Description | string | Human-readable policy description |
-| Controls | []Control | OSCAL control references (framework, class, id) |
+| Controls | []Control | Control references (framework, class, id) |
 
 **AmpelTenet fields**:
 
@@ -37,7 +38,7 @@ rules and merged into a combined bundle during generate.
 | Error | TenetError | Message and guidance for failing tenets |
 
 **Relationships**:
-- Matched to OSCAL rules by policy ID ↔ rule ID
+- Matched to assessment requirements by policy ID ↔ requirement ID
 - Merged into AmpelPolicyBundle during generate
 - Each granular file is independently authored and testable
 
@@ -89,23 +90,10 @@ the workspace configuration file.
   deduplicated
 - Duplicate specs within a repository are deduplicated
 
-**Source**: Parsed from `{workspace}/ampel/ampel-targets.yaml`
+**Source**: Received via `ScanRequest.Targets[].Variables` from
+`complytime.yaml` target entries.
 
-### 3. TargetConfig
-
-Top-level structure of the target repository configuration file.
-
-**Fields**:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| Repositories | []TargetRepository | List of repositories to scan |
-
-**Validation**:
-- Repositories MUST contain at least one entry
-- Entries are deduplicated by URL+branch before scanning
-
-### 4. PerRepoResult
+### 3. PerRepoResult
 
 Represents scan findings for a single repository, written as
 a JSON file in the workspace.
@@ -133,24 +121,27 @@ a JSON file in the workspace.
 **Relationships**:
 - One PerRepoResult per TargetRepository+branch+spec combination
 - Findings map back to AmpelPolicy.Tenets via TenetID
-- Aggregated into policy.PVPResult for complyctl
+- Aggregated into `plugin.ScanResponse` for complyctl
 
-### 5. PluginConfig
+### 4. Plugin Configuration
 
-Plugin configuration received from complyctl via Configure().
+Plugin configuration is stateless. Paths are derived from
+package constants in `config/config.go`. The only user-configurable
+override is the `ampel_policy_dir` global variable in
+`complytime.yaml`, received via `GenerateRequest.GlobalVariables`.
 
-**Fields**:
+**Package constants**:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| Workspace | string | Root workspace directory |
-| Profile | string | Compliance profile identifier |
-| PolicyDir | string | AMPEL policy directory (default: {workspace}/ampel/policy/) |
-| ResultsDir | string | Results output directory (default: {workspace}/ampel/results/) |
-| TargetsFile | string | Path to ampel-targets.yaml (default: {workspace}/ampel/ampel-targets.yaml) |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| PluginDir | "ampel" | Plugin subdirectory under workspace |
+| DefaultGranularPolicyDir | "granular-policies" | Default granular policy source directory |
+| GeneratedPolicyDir | "policy" | Generated policy bundle output directory |
+| DefaultResultsDir | "results" | Scan results output directory |
 
-**Source**: Manifest configuration + user overrides via
-`c2p-ampel-manifest.json`
+**Path helpers**: `GranularPolicyDirPath()`, `GeneratedPolicyDirPath()`,
+`ResultsDirPath()`, `SpecDirPath()` derive absolute paths from
+`complytime.WorkspaceDir`.
 
 ## Entity Relationships
 
@@ -159,7 +150,7 @@ Granular AMPEL Policies (policy_dir/*.json)
     │
     ▼ [convert package: LoadGranularPolicies]
     │
-OSCAL Policy ([]RuleSet)
+Assessment Configurations ([]plugin.AssessmentConfiguration)
     │
     ▼ [convert package: MatchPolicies + MergeToBundle]
 AmpelPolicyBundle
@@ -167,20 +158,20 @@ AmpelPolicyBundle
     ├── written to → PolicyDir/complytime-ampel-policy.json
     │
     ▼ [scan package]
-TargetConfig
+Target Variables (from ScanRequest.Targets[].Variables)
     │
-    ├── parsed from → TargetsFile
+    ├── received from → complytime.yaml target entries
     │
     ▼ [for each TargetRepository + branch + spec]
 PerRepoResult
     │
     ├── written to → ResultsDir/{repo-name}-{branch}.json
     │
-    ▼ [results package: ToPVPResult]
-    │   Groups findings by CheckID → one ObservationByCheck
-    │   per check with multiple Subjects (one per repo)
+    ▼ [results package: ToScanResponse]
+    │   Groups findings by CheckID → one assessment log entry
+    │   per check with multiple subjects (one per repo)
     │
-policy.PVPResult (returned to complyctl)
+plugin.ScanResponse (returned to complyctl)
 ```
 
 ## State Transitions
@@ -193,13 +184,12 @@ Policy exists → Generate() → Policy overwritten with new scope
 
 ### Scan Flow
 ```
-No results → GetResults() → Per-repo result files created + PVPResult returned
-Results exist → GetResults() → Results overwritten + PVPResult returned
+No results → Scan() → Per-repo result files created + ScanResponse returned
+Results exist → Scan() → Results overwritten + ScanResponse returned
 ```
 
 ### Error States
-- Tool missing → Configure/Generate/GetResults returns error
-  with tool name
+- Tool missing → Generate/Scan returns error with tool name
 - Target unreachable → PerRepoResult with status "error",
   scanning continues for remaining targets
 - Rate limited → PerRepoResult with status "error" for affected

@@ -1,31 +1,33 @@
 # Research: AMPEL Branch Protection Scanning Plugin
 
-**Branch**: `001-ampel-branch-scan` | **Date**: 2026-02-11
+**Branch**: `002-ampel-branch-scan` | **Date**: 2026-02-11
 
 ## R-001: Plugin Interface and Registration
 
-**Decision**: Implement `policy.Provider` interface from
-`compliance-to-policy-go/v2/policy` package.
+**Decision**: Implement `pkg/plugin.Plugin` interface from the
+in-tree `pkg/plugin` package.
 
-**Rationale**: This is the exact same pattern used by the
-openscap-plugin. The framework handles all gRPC
+**Rationale**: This is the Gemara-native scanning provider
+interface used by complyctl. The framework handles gRPC
 serialization/deserialization automatically via proto
-transformations in `plugin/transform.go`.
+transformations.
 
 **Interface**:
 ```go
-type Provider interface {
-    Configure(context.Context, map[string]string) error
-    Generate(context.Context, Policy) error
-    GetResults(context.Context, Policy) (PVPResult, error)
+type Plugin interface {
+    Generate(context.Context, *GenerateRequest) (*GenerateResponse, error)
+    Scan(context.Context, *ScanRequest) (*ScanResponse, error)
+    Describe(context.Context, *DescribeRequest) (*DescribeResponse, error)
 }
 ```
 
-Where `Policy` is `[]extensions.RuleSet` from `oscal-sdk-go`.
+Generate receives `[]AssessmentConfiguration` and global
+variables. Scan receives targets with per-target variables.
+Describe reports plugin health and required variables.
 
-**Registration** uses `plugin.Register(ServeConfig{...})` with
-`plugin.PVPPlugin{Impl: server}` wrapping the Provider, identical
-to the openscap-plugin main.go pattern.
+**Registration** uses `plugin.Serve(ampelPlugin)` with
+`server.New()` creating the `PluginServer`, following the
+openscap-plugin main.go pattern.
 
 **Alternatives considered**:
 - Direct gRPC service implementation: Rejected because the
@@ -70,18 +72,19 @@ Branch protection rules use predicate type:
 - PolicySet format: Not needed for single-policy generation.
   Can be added later if multiple policy files are required.
 
-## R-003: OSCAL to AMPEL Policy Matching (Updated 2026-02-17)
+## R-003: Assessment Requirement to AMPEL Policy Matching (Updated 2026-02-17)
 
-**Decision**: Match OSCAL rule IDs against granular AMPEL policy
-file IDs and merge the matching policies into a combined bundle.
-This replaces the earlier approach of generating CEL expressions
-from OSCAL rules.
+**Decision**: Match assessment requirement IDs against granular
+AMPEL policy file IDs and merge the matching policies into a
+combined bundle. This replaces the earlier approach of generating
+CEL expressions from OSCAL rules.
 
 **Rationale**: Granular AMPEL policies are authored independently
 (one JSON file per control) with hand-crafted CEL expressions,
 attestation type references, and remediation guidance. The plugin
-matches OSCAL rule IDs to policy file IDs, selecting only the
-policies relevant to the current assessment plan. This approach:
+matches requirement IDs to policy file IDs, selecting only the
+policies relevant to the current assessment configurations. This
+approach:
 - Preserves expert-authored CEL logic (no auto-generation)
 - Supports independent policy authoring and testing
 - Aligns with Gemara2Ampel workspace mode output
@@ -89,16 +92,16 @@ policies relevant to the current assessment plan. This approach:
 
 **Matching flow**:
 1. `LoadGranularPolicies(dir)` → loads all `*.json` from policy_dir
-2. `MatchPolicies(oscalRules, granularPolicies)` → matches by
-   rule ID ↔ policy ID
+2. `MatchPolicies(requirementIDs, granularPolicies)` → matches by
+   requirement ID ↔ policy ID
 3. `MergeToBundle(matched)` → produces single policy bundle
 
 **Alternatives considered**:
-- CEL expression generation from OSCAL rules: Initially
+- CEL expression generation from assessment rules: Initially
   implemented but replaced. Auto-generated CEL was fragile,
   hard to maintain, and did not capture domain-specific
   verification logic that policy authors need to express.
-- Direct OSCAL-to-CLI-args mapping: Rejected because AMPEL
+- Direct rule-to-CLI-args mapping: Rejected because AMPEL
   requires policy files as input to `ampel verify`.
 
 ## R-004: External Tool Invocation Pattern
@@ -135,7 +138,7 @@ in `go.mod`:
 
 | Need | Library | Already in go.mod |
 |------|---------|-------------------|
-| Plugin framework | compliance-to-policy-go/v2 | Yes (v2.0.0-rc.1) |
+| Plugin framework | pkg/plugin (in-tree) | Yes |
 | Plugin hosting | hashicorp/go-plugin v1.7.0 | Yes |
 | Structured logging | hashicorp/go-hclog v1.6.3 | Yes |
 | Testing assertions | stretchr/testify v1.11.1 | Yes |
@@ -174,55 +177,69 @@ logger = hclog.New(&hclog.LoggerOptions{
 })
 ```
 
-This satisfies Constitution Principle IV (Observability).
+This satisfies Constitution Principle IV (Readability First).
 
-## R-007: Target Configuration File Format
+## R-007: Target Configuration Format
 
-**Decision**: YAML file in workspace (`ampel-targets.yaml`)
-listing repositories with branch names.
+**Decision**: Target repositories are configured as entries in
+`complytime.yaml` with per-target variables (url, specs, branches,
+access_token, platform). No separate target configuration file.
 
-**Rationale**: YAML is already parsed via `goccy/go-yaml` in the
-project. The format is:
+**Rationale**: complyctl's `pkg/plugin` interface passes target
+information via `ScanRequest.Targets[].Variables` as plain string
+key-value pairs. This eliminates the need for a separate YAML
+file and custom parsing — the plugin receives targets directly
+from complyctl.
 
+**Example** (in `complytime.yaml`):
 ```yaml
-repositories:
-  - url: https://github.com/org/repo1
-    branches:
-      - main
-      - release
-  - url: https://gitlab.com/org/repo2
-    branches:
-      - main
+targets:
+  - id: myorg-frontend
+    policies:
+      - branch-protection
+    variables:
+      url: https://github.com/myorg/myrepo
+      specs: builtin:github/branch-rules.yaml
+      branches: main,release
+  - id: myorg-infra
+    policies:
+      - branch-protection
+    variables:
+      url: https://gitlab.com/myorg/infrastructure
+      specs: builtin:github/branch-rules.yaml
+      branches: main
 ```
 
 **Alternatives considered**:
+- Separate YAML file (`ampel-targets.yaml`): Originally
+  implemented but replaced. Using `complytime.yaml` target
+  entries is simpler and consistent with how complyctl passes
+  configuration to all plugins.
 - JSON format: Rejected as less human-readable for config files.
-- TOML: Rejected because no TOML library exists in go.mod.
 
-## R-008: API Isolation for Future Gemara Migration
+## R-008: Convert Package Isolation
 
-**Decision**: Isolate the OSCAL-to-AMPEL conversion in a
+**Decision**: Isolate the requirement-to-AMPEL conversion in a
 dedicated `convert` package with a clean interface boundary.
 
-**Rationale**: The communication API will change when complyctl
-moves from OSCAL to Gemara. The convert package encapsulates
-all policy-source-specific logic behind:
+**Rationale**: The convert package encapsulates all
+policy-matching logic behind:
 
 ```go
 func LoadGranularPolicies(dir string) ([]AmpelPolicy, error)
-func MatchPolicies(rules []extensions.RuleSet, policies []AmpelPolicy) []AmpelPolicy
+func MatchPolicies(requirementIDs []string, policies []AmpelPolicy) []AmpelPolicy
 func MergeToBundle(policies []AmpelPolicy) *AmpelPolicyBundle
 ```
 
-When Gemara replaces OSCAL, only `MatchPolicies` changes to
-accept Gemara policy identifiers. The load and merge functions,
-and all downstream packages (scan, results, targets, config),
-remain untouched.
+Only `MatchPolicies` depends on the upstream policy model (the
+requirement ID format). The load and merge functions, and all
+downstream packages (scan, results, targets, config), are
+independent of how requirements are sourced.
 
 **Alternatives considered**:
 - Interface-based abstraction with multiple implementations:
   Rejected per simplicity principle. A single concrete
-  implementation is sufficient; swap it when Gemara arrives.
+  implementation is sufficient.
 
 ## R-009: Per-Repository Result Files
 
@@ -231,8 +248,8 @@ remain untouched.
 
 **Rationale**: The spec requires separate result files per
 repository. Using the repository name (sanitized) as the filename
-makes results easily discoverable. The consolidated PVPResult
-returned to complyctl aggregates all per-repo observations.
+makes results easily discoverable. The consolidated ScanResponse
+returned to complyctl aggregates all per-repo assessment logs.
 
 **Alternatives considered**:
 - Single consolidated result file: Rejected by spec requirement
@@ -268,35 +285,28 @@ appear as "fail" because the predicate field is empty.
 ## R-011: Multi-Target Observation Grouping (Added 2026-02-17)
 
 **Decision**: Group findings with the same CheckID into a single
-ObservationByCheck with multiple Subjects (one per repository).
+assessment log entry with multiple subjects (one per repository).
 
-**Rationale**: The oscal-sdk-go library's observation manager
-(`observations.go:112`) stores observations in a map keyed by
-`observation.Title`. When multiple observations share the same
-Title (CheckID), only the last one survives (last-write-wins).
-The fix groups all repo subjects under one ObservationByCheck
-per CheckID, which matches the OSCAL pattern and produces
-correct multi-target assessment results.
-
-**OSCAL conformance**: The `observation.subjects` array in OSCAL
-Assessment Results is designed for multiple inventory items per
-observation. The C2P library's `toOscalObservation` function
-already handles multiple subjects correctly.
+**Rationale**: When multiple results share the same CheckID,
+grouping them into a single assessment log entry with multiple
+subjects prevents duplicate entries and produces correct
+multi-target assessment results. The `ToScanResponse` function
+uses insertion-order tracking to produce deterministic output.
 
 ## R-012: Test Strategy with Mock Fixtures
 
-**Decision**: Provide mock OSCAL assessment plan and AMPEL policy
-fixtures in `convert/testdata/` for unit testing the conversion
-layer.
+**Decision**: Provide mock assessment configuration and AMPEL
+policy fixtures in `convert/testdata/` for unit testing the
+conversion layer.
 
 **Rationale**: The user explicitly requires mocked data to verify:
-1. What happens to AMPEL policy when assessment plan changes
-2. Assessment plan ↔ AMPEL policy linkage
+1. What happens to AMPEL policy when assessment configurations change
+2. Assessment configuration ↔ AMPEL policy linkage
 3. Final AMPEL policy accuracy after generate
 
 Test fixtures include:
-- `assessment-plan-full.json` - Complete OSCAL plan with multiple
-  branch protection rules
+- `assessment-plan-full.json` - Complete assessment configuration
+  with multiple branch protection requirement IDs
 - `assessment-plan-subset.json` - Plan with fewer rules (tests
   scope filtering)
 - `ampel-policy-expected.json` - Expected AMPEL output for full

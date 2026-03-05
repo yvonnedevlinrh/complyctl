@@ -4,7 +4,7 @@
 
 NOTE: The development of this plugin is in progress and therefore it should only be used for testing purposes at this point.
 
-**ampel-plugin** is a plugin which extends the complyctl capabilities to verify branch protection settings on GitHub repositories using [AMPEL](https://github.com/carabiner-dev/ampel) and [snappy](https://github.com/carabiner-dev/snappy). The plugin communicates with complyctl via gRPC, providing a standard and consistent communication mechanism that gives independence for plugin developers to choose their preferred languages. This plugin is structured to allow modular development, ease of packaging, and maintainability.
+**ampel-plugin** is a scanning provider which extends complyctl to verify branch protection settings on GitHub and GitLab repositories using [AMPEL](https://github.com/carabiner-dev/ampel) and [snappy](https://github.com/carabiner-dev/snappy). The plugin communicates with complyctl via gRPC using the `pkg/plugin` scanning provider interface, providing a standard and consistent communication mechanism that gives independence for plugin developers to choose their preferred languages. This plugin is structured to allow modular development, ease of packaging, and maintainability.
 
 For now, this plugin is developed together with complyctl for better collaboration during this phase of the project. In the future, this plugin may be decoupled into its own repository.
 
@@ -19,8 +19,11 @@ ampel-plugin/
 │ ├── convert_test.go     # Tests for functions in convert.go
 │ ├── convert.go          # Main code used to match and merge AMPEL policies
 │ └── types.go            # AMPEL policy type definitions
-├── docs/                 # Documentation and sample files
-│ └── samples/            # Sample configuration files
+├── docs/                 # Documentation and configuration reference
+│ └── configuration.md    # Detailed configuration reference with examples
+├── intoto/               # Package for in-toto attestation handling
+│ ├── intoto_test.go      # Tests for functions in intoto.go
+│ └── intoto.go           # In-toto statement and DSSE envelope types
 ├── results/              # Package to parse AMPEL results and produce assessment logs
 │ ├── results_test.go     # Tests for functions in results.go
 │ └── results.go          # Main code used to parse AMPEL output and produce assessment logs
@@ -31,9 +34,9 @@ ampel-plugin/
 ├── server/               # Package to process server functions. Here is where the plugin communicates with complyctl CLI
 │ ├── server_test.go      # Tests for functions in server.go
 │ └── server.go           # Main code used to process server functions
-├── targets/              # Package to load and validate target repository configuration
+├── targets/              # Package to parse and validate target repository URLs
 │ ├── targets_test.go     # Tests for functions in targets.go
-│ └── targets.go          # Main code used to load target YAML configuration
+│ └── targets.go          # Main code used to parse repository URLs and detect platforms
 ├── toolcheck/            # Package to verify required external tools are available
 │ ├── toolcheck_test.go   # Tests for functions in toolcheck.go
 │ └── toolcheck.go        # Main code used to check snappy and ampel availability
@@ -45,39 +48,43 @@ ampel-plugin/
 
 ### Configuration
 
-The plugin has some parameters that can be configured via the manifest file. Check the quick start [guide](../../docs/QUICK_START.md) to see an example.
-Complyctl processes the manifest file and sends the configuration values to the plugin.
+The plugin receives its configuration through the complyctl scanning provider interface:
 
-These are the configuration values used by ampel-plugin:
-- **workspace**: Directory used to store plugin artifacts (policies, results, specs). This configuration can also be set by complyctl. Within this directory, the plugin creates an `ampel/` subdirectory for its files.
-- **profile**: Is the FrameworkID informed by complyctl. This FrameworkID corresponds to the compliance profile used for branch protection checks.
-- **results_dir**: Directory for per-repository scan result files. Default: `results` (resolved relative to `{workspace}/ampel/`).
+- **Global variables** (via `GenerateRequest`): Workspace-scoped settings shared across all targets, such as `ampel_policy_dir` for specifying a custom granular policy source directory.
+- **Target variables** (via `ScanRequest`): Per-target settings including repository URL, branch names, snappy spec references, and optional authentication tokens.
+
+See `docs/configuration.md` for the complete configuration reference with examples.
 
 ### Target Configuration
 
-Repositories to scan are defined directly in `complytime.yaml` under the `repositories` field of each target entry. This eliminates the need for a separate targets file.
+Each repository to scan is defined as its own target entry in `complytime.yaml`. Repository details are passed as plain string variables, with multi-value fields using comma-separated strings:
 
 ```yaml
 targets:
-  - id: github-repos
+  - id: myorg-frontend
     policies:
       - branch-protection
-    repositories:
-      - url: https://github.com/myorg/myrepo
-        branches: [main, release]
-        specs: [builtin:github/branch-rules.yaml]
-        access_token: ${MY_GITHUB_PAT}  # optional, expanded from env
-      - url: https://github.com/myorg/another-repo
-        branches: [main]
-        specs: [builtin:github/branch-rules.yaml]
-        # no access_token → snappy reads GITHUB_TOKEN from env at runtime
+    variables:
+      url: https://github.com/myorg/myrepo
+      specs: builtin:github/branch-rules.yaml
+      branches: main,release
+      access_token: ${MY_GITHUB_PAT}  # optional, expanded from env
+  - id: myorg-infra
+    policies:
+      - branch-protection
+    variables:
+      url: https://gitlab.com/myorg/infrastructure
+      specs: builtin:github/branch-rules.yaml
+      branches: main
+      access_token: ${GITLAB_API_TOKEN}
 ```
 
-Each repository entry supports:
+Each target entry supports the following variables:
 - **url** (required): HTTPS URL to a GitHub or GitLab repository.
-- **branches** (required): List of branch names to scan.
-- **specs** (required): List of snappy spec file references. Use the `builtin:` prefix for embedded specs (e.g., `builtin:github/branch-rules.yaml`) or absolute paths for custom specs.
+- **specs** (required): Comma-separated snappy spec file references. Use the `builtin:` prefix for embedded specs (e.g., `builtin:github/branch-rules.yaml`) or absolute paths for custom specs.
+- **branches** (optional): Comma-separated branch names to scan. Default: `main`.
 - **access_token** (optional): Per-repository authentication token. Supports `${VAR}` env var expansion. When set, the token is injected as `GITHUB_TOKEN` or `GITLAB_TOKEN` (based on the repository URL platform) into the snappy subprocess environment. When omitted, snappy inherits the parent process environment.
+- **platform** (optional): `github` or `gitlab`. Required for self-hosted instances; auto-detected for `github.com` and `gitlab.com`.
 
 See `docs/configuration.md` for comprehensive examples including mixed-platform scanning and token authentication.
 
@@ -90,7 +97,7 @@ Sample policy files are available in the [complytime-demos](https://github.com/c
 ### Generate
 
 When the plugin receives the `generate` command from complyctl, it will:
-* Load granular AMPEL policy files from the configured `policy_dir`
+* Load granular AMPEL policy files from the configured policy directory
 * Match assessment configuration requirement IDs to available AMPEL policies
 * Merge matched policies into a single policy bundle
 * Write the bundle to `{workspace}/ampel/policy/complytime-ampel-policy.json`
@@ -99,24 +106,24 @@ When the plugin receives the `generate` command from complyctl, it will:
 
 When the plugin receives the `scan` command from complyctl, it will:
 * Validate that `snappy` and `ampel` CLI tools are available on the system PATH
-* Load the target repository configuration from the `repositories` variable (passed as JSON by complyctl)
+* Read target repository configuration from the scan request targets
 * For each repository, branch, and spec combination:
-  * Run `snappy snap` to collect branch protection data from the GitHub API as an in-toto attestation
+  * Run `snappy snap` to collect branch protection data from the GitHub or GitLab API as an in-toto attestation
   * Extract the subject hash from the snappy attestation
   * Run `ampel verify` to evaluate the attestation against the generated policy bundle
   * Parse the AMPEL verification results (supporting both raw and DSSE-wrapped attestations)
-* Write per-repository result files to the configured `results_dir`
+* Write per-repository result files to the configured results directory
 * Return assessment results to complyctl for inclusion in the compliance report
 
 ## Installation
 
 ### Prerequisites
 
-- **Go** version 1.22 or higher
+- **Go** version 1.24 or higher
 - **Make** (optional, for using the Makefile)
 - **snappy** CLI tool
 - **ampel** CLI tool
-- A **GitHub personal access token** with repository read permissions
+- A **GitHub** and/or **GitLab personal access token** with repository read permissions
 
 ### Installing snappy and ampel
 
@@ -142,15 +149,19 @@ snappy --help
 ampel --help
 ```
 
-### GitHub Token
+### Authentication Tokens
 
-The `snappy` tool requires a valid GitHub personal access token to access the GitHub API for reading branch protection settings. Set the `GITHUB_TOKEN` environment variable before running a scan:
+The `snappy` tool requires a valid personal access token to access the GitHub or GitLab API for reading branch protection settings. Set the appropriate environment variable before running a scan:
 
 ```bash
+# For GitHub repositories
 export GITHUB_TOKEN=ghp_your_token_here
+
+# For GitLab repositories
+export GITLAB_TOKEN=glpat-your_token_here
 ```
 
-The token needs at minimum read access to the repositories being scanned.
+The token needs at minimum read access to the repositories being scanned. When scanning repositories across both platforms, both environment variables must be set. Alternatively, per-repository tokens can be configured via the `access_token` target variable in `complytime.yaml` (see `docs/configuration.md`).
 
 ### Clone the repository
 
@@ -161,30 +172,25 @@ cd complyctl
 
 ## Build Instructions
 
-To compile complyctl and ampel-plugin:
+To compile complyctl and the ampel-plugin:
 
 ```bash
 make build
+cd cmd/ampel-plugin && go build -mod=vendor -o ../../bin/complyctl-provider-ampel .
 ```
+
+Note: The main `make build` target compiles complyctl and the openscap-plugin. The ampel-plugin must be built separately as shown above.
 
 ### Plugin Registration
 
-After building, register the plugin with complyctl by placing the manifest and binary in the plugins directory:
+After building, register the plugin with complyctl by placing the binary in the providers directory with the required naming convention:
 
 ```bash
-mkdir -p ~/.local/share/complytime/plugins
-
-cp bin/ampel-plugin ~/.local/share/complytime/plugins/
-cp cmd/ampel-plugin/docs/samples/c2p-ampel-manifest.json ~/.local/share/complytime/plugins/
+mkdir -p ~/.complytime/providers
+cp bin/complyctl-provider-ampel ~/.complytime/providers/
 ```
 
-Update the `sha256` field in the manifest file with the checksum of the binary:
-
-```bash
-sha256sum ~/.local/share/complytime/plugins/ampel-plugin
-```
-
-Edit `~/.local/share/complytime/plugins/c2p-ampel-manifest.json` and set the `sha256` field to the computed checksum.
+The plugin is discovered automatically by complyctl — no manifest files or checksums are required. The evaluator ID is derived from the executable name by removing the `complyctl-provider-` prefix (e.g., `complyctl-provider-ampel` becomes evaluator ID `ampel`).
 
 ### Running
 
@@ -217,12 +223,12 @@ cd ../../base_ansible_env
 ansible-playbook populate_complyctl_dev_binaries.yml
 ```
 
-This playbook builds complyctl from source, copies the binaries and plugin manifests, installs snappy and ampel via `go install`, and deploys the AMPEL policy files and targets configuration to the VM.
+This playbook builds complyctl from source, copies the binaries and plugin, installs snappy and ampel via `go install`, and deploys the AMPEL policy files and targets configuration to the VM.
 
 4. Deploy the AMPEL policy content (catalog, profile, and component definition):
 
 ```bash
-ansible-playbook populate_complyctl_dev_content_ampel.yml
+ansible-playbook populate_complyctl_dev_content.yml
 ```
 
 5. SSH into the VM and run a scan:
@@ -232,9 +238,8 @@ vagrant ssh
 # or: ssh ansible@<VM_IP>
 
 export GITHUB_TOKEN=ghp_your_token_here
-complyctl plan ampel_bp
-complyctl generate
-complyctl scan -d
+complyctl generate --policy-id branch-protection
+complyctl scan --policy-id branch-protection
 ```
 
 Note: Update the `complyctl_repo_dest` variable in the playbook if your local complyctl clone is not at the default path. See the complytime-demos README for additional configuration options.
@@ -246,5 +251,5 @@ Tests are organized within each package. Whenever possible a unit test is create
 Run tests using:
 
 ```bash
-make test-units
+make test-unit
 ```

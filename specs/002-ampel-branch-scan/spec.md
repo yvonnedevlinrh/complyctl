@@ -1,6 +1,6 @@
 # Feature Specification: AMPEL Branch Protection Scanning Plugin
 
-**Feature Branch**: `001-ampel-branch-scan`
+**Feature Branch**: `002-ampel-branch-scan`
 **Created**: 2026-02-11
 **Status**: Draft
 **Input**: User description: "AMPEL plugin for complyctl that scans branch protection rules on GitHub and GitLab repositories"
@@ -17,20 +17,21 @@
 
 ### Session 2026-02-17
 
-- Q: How are AMPEL policies authored and consumed? → A: Granular AMPEL policies (one JSON file per control) are authored independently and stored in the policy_dir. The plugin matches OSCAL rules to these policies by ID and merges only the matching ones into a combined bundle at generate time. This replaces the earlier approach of generating CEL expressions from OSCAL rules.
+- Q: How are AMPEL policies authored and consumed? → A: Granular AMPEL policies (one JSON file per control) are authored independently and stored in the policy_dir. The plugin matches assessment requirement IDs to these policies by ID and merges only the matching ones into a combined bundle at generate time. This replaces the earlier approach of generating CEL expressions from OSCAL rules.
 - Q: What snappy spec files should be used per repository? → A: Each repository in the targets file MUST specify one or more spec references via a `specs` field. Specs can use the `builtin:` prefix for embedded specs (e.g., `builtin:github/branch-rules.yaml`) or absolute paths for custom specs.
 - Q: How does snappy authenticate to the GitHub API? → A: The `GITHUB_TOKEN` environment variable must be set with a valid personal access token before running a scan. The token is consumed by snappy, not by the plugin directly.
+- Q: How does snappy authenticate to the GitLab API? → A: The `GITLAB_TOKEN` environment variable must be set with a valid personal access token before running a scan against GitLab repositories. snappy detects the hosting platform from the repository URL and uses the appropriate token.
 - Q: What output format does ampel verify produce? → A: `ampel verify --attest-results` produces DSSE-wrapped in-toto attestations. The plugin must unwrap the DSSE envelope (base64-decode the payload) before parsing the result predicate.
-- Q: How are results from multiple targets represented in OSCAL? → A: Findings with the same CheckID across repositories are grouped into a single OSCAL ObservationByCheck with multiple Subjects (one per repository). This matches the OSCAL pattern and prevents last-write-wins overwrites in the downstream observation manager.
+- Q: How are results from multiple targets grouped? → A: Findings with the same CheckID across repositories are grouped into a single assessment log entry with multiple subjects (one per repository). This prevents last-write-wins overwrites and produces a unified view per check.
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Generate AMPEL Policies from Assessment Plan (Priority: P1)
 
-A compliance administrator has already created an assessment plan
-using `complyctl plan`. They now run `complyctl generate` to
+A compliance administrator has a workspace with cached Gemara
+policies. They run `complyctl generate` to
 produce the plugin-specific policy artifacts. The AMPEL plugin
-receives the OSCAL rules from the assessment plan and matches
+receives the assessment configurations from complyctl and matches
 them against granular AMPEL policy files (one per control) stored
 in the policy directory. It then merges only the matching policies
 into a combined policy bundle. When more granular policies exist
@@ -74,13 +75,13 @@ broader AMPEL policy.
 
 A DevSecOps engineer runs `complyctl scan` to evaluate branch
 protection rules on their GitHub and GitLab repositories. The
-AMPEL plugin invokes the installed AMPEL toolchain (ampel, snappy,
+AMPEL plugin invokes the installed AMPEL toolchain (snappy,
 ampel) to verify attestations and branch protection configurations.
 The plugin produces a separate result file for each scanned
-repository in the workspace, and returns standardized OSCAL
-assessment results to complyctl. The user interacts only with
-complyctl commands and sees results in the same format as any
-other plugin.
+repository in the workspace, and returns standardized assessment
+results to complyctl. The user interacts only with complyctl
+commands and sees results in the same format as any other
+scanning provider.
 
 **Why this priority**: Scanning is the core value proposition of
 the plugin. This story delivers the primary capability users need.
@@ -88,8 +89,8 @@ the plugin. This story delivers the primary capability users need.
 **Independent Test**: With a generated AMPEL policy in place,
 run `complyctl scan` targeting at least two repositories (one
 GitHub, one GitLab). Verify that per-repository result files
-appear in the workspace and that `assessment-results.json`
-contains observations for each repository.
+appear in the workspace and that assessment log entries are
+returned for each repository.
 
 **Acceptance Scenarios**:
 
@@ -187,7 +188,7 @@ from and written to the custom location.
    within the complyctl workspace.
 
 2. **Given** a custom policy location is configured via the
-   plugin manifest or user configuration,
+   `ampel_policy_dir` global variable in `complytime.yaml`,
    **When** the user runs `complyctl generate`,
    **Then** AMPEL policies are written to the specified custom
    location.
@@ -223,17 +224,19 @@ from and written to the custom location.
 
 ### Functional Requirements
 
-- **FR-001**: The plugin MUST implement the complyctl plugin
-  interface (Configure, Generate, and GetResults) so it is
-  invoked transparently through standard complyctl commands.
-  Configure receives the plugin settings from the manifest;
-  Generate and GetResults are invoked by `complyctl generate`
-  and `complyctl scan` respectively.
+- **FR-001**: The plugin MUST implement the complyctl scanning
+  provider interface (`pkg/plugin.Plugin`: Generate, Scan, and
+  Describe) so it is invoked transparently through standard
+  complyctl commands. Generate receives assessment
+  configurations and global variables; Scan receives targets
+  with per-target variables; Describe reports plugin health
+  and required variables.
 
-- **FR-002**: The plugin MUST match OSCAL rules from the complyctl
-  assessment plan against granular AMPEL policy files and merge
-  the matching policies into a combined bundle during the generate
-  phase, abstracting AMPEL-specific formats from the user.
+- **FR-002**: The plugin MUST match assessment requirement IDs
+  from the complyctl assessment configurations against granular
+  AMPEL policy files and merge the matching policies into a
+  combined bundle during the generate phase, abstracting
+  AMPEL-specific formats from the user.
 
 - **FR-003**: When more granular AMPEL policies exist than the
   complyctl assessment plan requires, the plugin MUST honor the
@@ -248,9 +251,10 @@ from and written to the custom location.
   each scanned repository within the complyctl workspace
   directory structure.
 
-- **FR-006**: The plugin MUST return OSCAL-compatible assessment
-  results to complyctl, with each repository identified as a
-  distinct subject in the observations.
+- **FR-006**: The plugin MUST return standardized assessment
+  results to complyctl via `plugin.ScanResponse`, with each
+  repository producing assessment log entries that identify
+  the repository as a distinct subject.
 
 - **FR-007**: The plugin MUST check for the presence of required
   system tools (snappy, ampel) before performing operations
@@ -260,9 +264,11 @@ from and written to the custom location.
   location where AMPEL policies are consumed from, with an
   intuitive default within the complyctl workspace.
 
-- **FR-009**: The plugin MUST be discoverable by complyctl through
-  a plugin manifest file, following the same conventions as other
-  complyctl plugins.
+- **FR-009**: The plugin MUST be discoverable by complyctl via
+  the `complyctl-provider-*` executable naming convention in
+  the providers directory (`~/.complytime/providers/`). No
+  manifest files or checksums are required. The evaluator ID
+  is derived from the executable name.
 
 - **FR-010**: The plugin MUST preserve the standard complyctl user
   experience so that users can switch between plugins (e.g.,
@@ -270,14 +276,17 @@ from and written to the custom location.
   formats.
 
 - **FR-011**: The plugin MUST allow users to specify which
-  repositories to scan through a dedicated configuration file
-  in the complyctl workspace. Each entry MUST include the
-  repository URL, the target branch names to evaluate, and the
-  snappy spec file references to use. Specs can reference
-  embedded files via the `builtin:` prefix or custom files via
-  absolute paths. Each workspace can define its own set of
-  target repositories, enabling different target sets for
-  different environments or assessment contexts.
+  repositories to scan through target entries in
+  `complytime.yaml`. Each target's `variables` map MUST
+  include the repository URL (`url`), snappy spec file
+  references (`specs`), and optionally branch names
+  (`branches`, default: `main`), authentication token
+  (`access_token`), and platform hint (`platform`). Specs
+  can reference embedded files via the `builtin:` prefix or
+  custom files via absolute paths. Each workspace can define
+  its own set of target repositories, enabling different
+  target sets for different environments or assessment
+  contexts.
 
 - **FR-012**: The plugin MUST handle DSSE-wrapped in-toto
   attestations produced by `ampel verify --attest-results`,
@@ -285,10 +294,9 @@ from and written to the custom location.
   predicate.
 
 - **FR-013**: The plugin MUST group findings with the same CheckID
-  across multiple repositories into a single OSCAL observation
-  with multiple subjects, rather than creating separate
-  observations that would be overwritten by the downstream
-  observation manager.
+  across multiple repositories into a single assessment log
+  entry with multiple subjects, rather than creating separate
+  entries per repository.
 
 ### Key Entities
 
@@ -307,9 +315,11 @@ from and written to the custom location.
   containing detailed scan findings for a single repository,
   including which branch protection rules passed or failed.
 
-- **Plugin Manifest**: The `c2p-ampel-manifest.json` file that
-  describes the plugin's identity, executable location,
-  configuration schema, and version.
+- **Scanning Provider Binary**: The `complyctl-provider-ampel`
+  executable discovered by complyctl via the
+  `complyctl-provider-*` naming convention. Plugin identity
+  (evaluator ID) is derived from the executable name; version
+  and health are reported via the Describe RPC.
 
 ### Assumptions
 
@@ -318,17 +328,19 @@ from and written to the custom location.
   rather than embedding their logic.
 
 - Authentication to the GitHub API is handled by snappy via
-  the `GITHUB_TOKEN` environment variable. The token must be
-  set before running a scan and needs read access to the
-  target repositories.
+  the `GITHUB_TOKEN` environment variable. Authentication to
+  the GitLab API is handled via the `GITLAB_TOKEN` environment
+  variable. The appropriate token must be set before running a
+  scan and needs read access to the target repositories.
+  snappy detects the hosting platform from the repository URL.
 
 - The complyctl workspace directory structure follows the
   established convention: `{workspace}/ampel/policy/` for
   policies and `{workspace}/ampel/results/` for scan outputs.
 
-- Branch protection rules map to specific OSCAL controls that
-  are defined in the compliance framework used by the assessment
-  plan.
+- Branch protection rules map to assessment requirement IDs
+  that correspond to granular AMPEL policy files in the policy
+  directory.
 
 - Re-running `complyctl generate` or `complyctl scan` overwrites
   existing plugin artifacts in the workspace, consistent with the
