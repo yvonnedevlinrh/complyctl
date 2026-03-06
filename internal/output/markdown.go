@@ -38,21 +38,21 @@ func (m *Markdown) SetEmbedEvaluationLog(path string) {
 func (m *Markdown) Write(outDir string) (string, error) {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Compliance Scan Report: %s\n\n", m.policyID))
-	sb.WriteString(fmt.Sprintf("**Generated**: %s\n\n", time.Now().Format(time.RFC3339)))
+	fmt.Fprintf(&sb, "# Compliance Scan Report: %s\n\n", m.policyID)
+	fmt.Fprintf(&sb, "**Generated**: %s\n\n", time.Now().Format(time.RFC3339))
 	sb.WriteString("---\n\n")
 
 	for _, ce := range m.evalLog.Evaluations {
-		sb.WriteString(fmt.Sprintf("## Control: %s\n\n", ce.Name))
-		sb.WriteString(fmt.Sprintf("- **Result**: %s\n", ce.Result.String()))
-		sb.WriteString(fmt.Sprintf("- **Message**: %s\n\n", ce.Message))
+		fmt.Fprintf(&sb, "## Control: %s\n\n", ce.Name)
+		fmt.Fprintf(&sb, "- **Result**: %s\n", ce.Result.String())
+		fmt.Fprintf(&sb, "- **Message**: %s\n\n", ce.Message)
 
 		for _, al := range ce.AssessmentLogs {
-			sb.WriteString(fmt.Sprintf("### %s\n", al.Requirement.EntryId))
-			sb.WriteString(fmt.Sprintf("- **Confidence**: %s\n", al.ConfidenceLevel.String()))
-			sb.WriteString(fmt.Sprintf("- **Result**: %s\n", al.Result.String()))
-			sb.WriteString(fmt.Sprintf("- **Message**: %s\n", al.Message))
-			sb.WriteString(fmt.Sprintf("- **Steps Executed**: %d\n", al.StepsExecuted))
+			fmt.Fprintf(&sb, "### %s\n", al.Requirement.EntryId)
+			fmt.Fprintf(&sb, "- **Confidence**: %s\n", al.ConfidenceLevel.String())
+			fmt.Fprintf(&sb, "- **Result**: %s\n", al.Result.String())
+			fmt.Fprintf(&sb, "- **Message**: %s\n", al.Message)
+			fmt.Fprintf(&sb, "- **Steps Executed**: %d\n", al.StepsExecuted)
 			sb.WriteString("\n")
 		}
 	}

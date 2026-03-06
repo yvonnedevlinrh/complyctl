@@ -174,8 +174,9 @@ func LoadFrom(configPath string) (*WorkspaceConfig, error) {
 	return &config, nil
 }
 
-// resolveEnvVars expands ${VAR} references in target variable values from the
-// process environment. Returns an error if a referenced variable is not set.
+// resolveEnvVars expands ${VAR} references in target variable values
+// from the process environment. Returns an error if a referenced
+// variable is not set.
 func resolveEnvVars(config *WorkspaceConfig) error {
 	for i, target := range config.Targets {
 		for key, val := range target.Variables {

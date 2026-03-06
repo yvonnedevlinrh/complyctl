@@ -55,7 +55,7 @@ func main() {
 	registerEnrichRoute(mux, store)
 
 	addr := ":" + port
-	log.Printf("Gemara Content Service listening on http://localhost%s", addr)
+	log.Printf("Gemara Content Service listening on http://localhost%s", addr) //nolint:gosec // G706: addr is from a hardcoded port, not user input
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -173,7 +173,7 @@ func serveManifest(w http.ResponseWriter, r *http.Request, store *contentStore, 
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(art.manifestBytes)
+	_, _ = w.Write(art.manifestBytes) //nolint:gosec // G705: internal test mock data, not user-tainted
 }
 
 // serveBlob handles GET /v2/{name}/blobs/{digest}
@@ -614,6 +614,20 @@ guidelines:
 	s.addArtifact("policies/cis-fedora-l1-workstation", []string{"v1.0.0", "latest"}, []layerDef{
 		{mediaType: gemaraCatalogType, data: cisCatalog},
 		{mediaType: gemaraPolicyType, data: cisPolicy},
+	})
+
+	// policies/ampel-branch-protection — AMPEL branch protection controls
+	ampelCatalog, err := seedData.ReadFile("testdata/ampel-branch-protection-catalog.yaml")
+	if err != nil {
+		log.Fatalf("failed to load AMPEL branch protection catalog seed data: %v", err)
+	}
+	ampelPolicy, err := seedData.ReadFile("testdata/ampel-branch-protection-policy.yaml")
+	if err != nil {
+		log.Fatalf("failed to load AMPEL branch protection policy seed data: %v", err)
+	}
+	s.addArtifact("policies/ampel-branch-protection", []string{"v1.0.0", "latest"}, []layerDef{
+		{mediaType: gemaraCatalogType, data: ampelCatalog},
+		{mediaType: gemaraPolicyType, data: ampelPolicy},
 	})
 
 	// Enrichment mappings
