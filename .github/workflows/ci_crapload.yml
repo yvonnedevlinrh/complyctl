@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: CRAP Load Check
+
+on:
+    pull_request:
+        branches:
+            - main
+
+permissions:
+    contents: read
+    pull-requests: write
+
+jobs:
+    crapload:
+        name: CRAP Load Analysis
+        uses: ./.github/workflows/reusable_crapload_analysis.yml
+        permissions:
+            contents: read
+            pull-requests: write
