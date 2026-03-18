@@ -45,6 +45,8 @@ governance/reports/*
 # Go workspaces
 go.work*
 
+megalinter-reports/
+
 # Speckit
 .specify/extensions/.cache/
 .specify/extensions/.backup/
@@ -54,5 +56,11 @@ go.work*
 
 # Agent dirs
 .cursor
+.claude
 
-megalinter-reports/
+# Agents specific files
+CLAUDE.md
+
+# Ignore generated credentials from google-github-actions/auth
+# See: https://github.com/google-github-actions/auth
+gha-creds-*.json
