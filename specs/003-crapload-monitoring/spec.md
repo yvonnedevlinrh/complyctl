@@ -86,7 +86,7 @@ As a CI/CD engineer, I want the CRAP analysis workflow to be designed as a reusa
 - **FR-001**: The system MUST compute CRAP scores for all functions using the formula: CRAP(m) = complexity^2 * (1 - lineCoverage/100)^3 + complexity
 - **FR-002**: The system MUST compute GazeCRAP scores for all functions using the formula: GazeCRAP(m) = complexity^2 * (1 - contractCoverage/100)^3 + complexity
 - **FR-003**: The system MUST run CRAP and GazeCRAP analysis automatically on every pull request
-- **FR-004**: The system MUST post a comment on each pull request summarising the CRAP and GazeCRAP scores for all functions in packages containing changed files
+- **FR-004**: The system MUST post a comment on each pull request summarising the CRAP and GazeCRAP scores for all functions in packages containing changed files. The reusable workflow produces the comment body as an artifact; the caller workflow is responsible for posting it
 - **FR-005**: The system MUST fail the CI check when any function's CRAP or GazeCRAP score exceeds the established baseline threshold
 - **FR-006**: The system MUST establish baseline CRAP and GazeCRAP thresholds by analysing the current state of the codebase
 - **FR-007**: The system MUST run a full codebase CRAP and GazeCRAP analysis whenever Go code is merged to main (push event with paths filter) and publish aggregate metrics to a GitHub Pages endpoint for dashboard consumption
@@ -95,7 +95,8 @@ As a CI/CD engineer, I want the CRAP analysis workflow to be designed as a reusa
 - **FR-010**: The system MUST clearly distinguish between CRAP regressions (score increases) and improvements (score decreases) in PR comments
 - **FR-011**: New functions introduced in a PR (with no existing baseline) MUST be evaluated against a default maximum CRAP threshold
 - **FR-012**: The system MUST handle PRs with no analysable code changes gracefully, indicating no CRAP impact
-- **FR-013**: The reusable workflow MUST accept configurable inputs (e.g., `new-function-threshold`, `baseline-file`, `packages`, `coverprofile`, `post-comment`). Per-function CRAP/GazeCRAP thresholds (default 15) are managed internally by gaze
+- **FR-013**: The reusable workflow MUST accept configurable inputs (e.g., `new-function-threshold`, `baseline-file`, `packages`, `coverprofile`). Per-function CRAP/GazeCRAP thresholds (default 15) are managed internally by gaze
+- **FR-014**: The reusable workflow MUST require only `contents: read` permission. PR comment posting and other write operations MUST be the caller workflow's responsibility, enabling per-repository customization without passing elevated permissions to the reusable workflow
 
 ### Key Entities
 
@@ -118,6 +119,10 @@ As a CI/CD engineer, I want the CRAP analysis workflow to be designed as a reusa
 
 - Q: How should the PR comment body be assembled to reduce workflow complexity? → A: Build the complete markdown body in the compare step (shell) instead of a separate JavaScript step. This eliminates intermediate temp files and the github-script dependency for report building.
 - Q: Should Gaze installation be deferred until after confirming Go file changes exist? → A: Yes — move change detection before Gaze installation and skip installation when no Go files changed, avoiding unnecessary `go install` overhead on non-code PRs.
+
+### Session 2026-03-18
+
+- Q: Should the reusable workflow post PR comments directly? → A: No — the reusable workflow should only require `contents: read` and produce the comment body as an artifact. The caller workflow handles posting, enabling per-repository customization and avoiding elevated permissions in the reusable workflow.
 
 ## Assumptions
 

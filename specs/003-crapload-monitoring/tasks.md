@@ -25,16 +25,16 @@
 
 ## Phase 2: User Story 4 - Reusable Workflow (Priority: P2, Foundational)
 
-**Goal**: Create a reusable GitHub Actions workflow (`workflow_call`) that performs CRAP/GazeCRAP analysis, compares against baseline, and posts PR comments. All other workflows (US1, US3) consume this.
+**Goal**: Create a reusable GitHub Actions workflow (`workflow_call`) that performs CRAP/GazeCRAP analysis, compares against baseline, and produces a comment body artifact. Requires only `contents: read`. All other workflows (US1, US3) consume this.
 
 **Independent Test**: Reference the reusable workflow from a test workflow in the same repo and verify it executes correctly.
 
 ### Implementation for User Story 4
 
-- [x] T004 [US4] Create reusable workflow skeleton with `workflow_call` trigger, 7 configurable inputs with defaults (go-version-file, gaze-version, baseline-file, packages, coverprofile, new-function-threshold=30, post-comment), required permissions (contents: read, pull-requests: write), and outputs (status, crapload-count, gaze-crapload-count, regressions-count, improvements-count). Per-function CRAP/GazeCRAP thresholds (default 15) are managed internally by gaze (FR-009, FR-013) in .github/workflows/reusable_crapload_analysis.yml
+- [x] T004 [US4] Create reusable workflow skeleton with `workflow_call` trigger, 6 configurable inputs with defaults (go-version-file, gaze-version, baseline-file, packages, coverprofile, new-function-threshold=30), required permissions (contents: read only), and outputs (status, crapload-count, gaze-crapload-count, regressions-count, improvements-count). Per-function CRAP/GazeCRAP thresholds (default 15) are managed internally by gaze (FR-009, FR-013, FR-014) in .github/workflows/reusable_crapload_analysis.yml
 - [x] T005 [US4] Implement core analysis job steps: checkout code, detect changed packages using `git diff --name-only` against PR base branch to extract unique Go package paths from changed `.go` files (skip all subsequent steps if no Go changes), set up Go from go-version-file input, install Gaze via `go install github.com/unbound-force/gaze/cmd/gaze@${{ inputs.gaze-version }}`, generate coverage profile scoped to changed packages with `go test -coverprofile`, run `gaze report --format=json --coverprofile` against changed packages (runs CRAP, Quality, Classification, and Docscan in one invocation), and extract CRAP data from report payload with path normalisation for baseline compatibility in .github/workflows/reusable_crapload_analysis.yml
 - [x] T006 [US4] Implement per-function baseline comparison step using `jq`: parse gaze JSON output keyed by `package.FunctionName`, load baseline from `inputs.baseline-file`, classify each function as regression (current score > baseline score), improvement (current score < baseline score), or new (no baseline entry, evaluate against `new-function-threshold` input, default 30); fail workflow if any regression or new-function violation detected (FR-005, FR-010, FR-011) in .github/workflows/reusable_crapload_analysis.yml
-- [x] T007 [US4] Implement PR comment step: format markdown report with overall status (PASS/FAIL), summary metrics table, regressions section (highlighted) clearly distinguishing score increases from improvements (FR-010), improvements section, new functions section, and link to workflow logs; post or update a single comment identified by a unique HTML marker string to avoid duplicates; skip if `post-comment` input is false in .github/workflows/reusable_crapload_analysis.yml
+- [x] T007 [US4] Build PR comment body as markdown in the compare step: overall status (PASS/FAIL), summary metrics table, regressions section (highlighted) clearly distinguishing score increases from improvements (FR-010), improvements section, new functions section, and link to workflow logs; upload comment body as artifact for the caller workflow to post (FR-014) in .github/workflows/reusable_crapload_analysis.yml
 - [x] T008 [US4] Implement edge case handling: detect PRs with no analysable code changes (post "no CRAP impact" comment and pass), handle Gaze installation failure (fail with clear error message), handle missing coverage data (report maximum risk scores), and set workflow outputs and exit code based on threshold enforcement in .github/workflows/reusable_crapload_analysis.yml
 
 **Checkpoint**: Reusable workflow is complete and independently callable. US1 and US3 can now proceed.
@@ -64,7 +64,7 @@
 
 ### Implementation for User Story 1
 
-- [x] T011 [US1] Create PR trigger workflow with `pull_request` (branches: main) trigger, calling `reusable_crapload_analysis.yml` with permissions `contents: read` and `pull-requests: write`, passing default inputs (FR-003, FR-013) in .github/workflows/ci_crapload.yml
+- [x] T011 [US1] Create PR trigger workflow with `pull_request` (branches: main) trigger, calling `reusable_crapload_analysis.yml` with `contents: read` permission. Add a second job that downloads the comment body artifact and posts/updates a PR comment using `pull-requests: write` (FR-003, FR-004, FR-014) in .github/workflows/ci_crapload.yml
 
 **Checkpoint**: PR quality gate is fully functional. Opening a PR triggers analysis, posts a comment, and fails on regressions.
 

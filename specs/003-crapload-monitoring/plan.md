@@ -81,7 +81,6 @@ Makefile                                   # New targets: crapload, crapload-bas
 | `packages` | string | `'./...'` | Go packages to analyse |
 | `coverprofile` | string | `'coverage.out'` | Path to coverage profile (auto-generated if absent) |
 | `new-function-threshold` | number | `30` | CRAP score ceiling for new functions with no baseline (industry-standard "danger" threshold) |
-| `post-comment` | boolean | `true` | Whether to post/update a PR comment |
 
 > **Note**: Per-function CRAP/GazeCRAP thresholds (both default to 15) are managed internally by gaze. The workflow uses `gaze report --format=json` which runs CRAP, Quality, Classification, and Docscan analysis in a single invocation. `new-function-threshold` (default 30) is the maximum allowable CRAP score for newly introduced functions that have no existing baseline entry. Existing functions are compared against their per-function baseline scores.
 
@@ -95,9 +94,11 @@ Makefile                                   # New targets: crapload, crapload-bas
 6. Run `gaze report --format=json --coverprofile=...` against changed packages (runs CRAP, Quality, Classification, and Docscan in a single invocation)
 7. Extract CRAP data from report payload (`.crap` field) with path normalisation for baseline compatibility
 8. Compare extracted CRAP results against baseline file (per-function comparison — see below)
-9. Format PR comment (regressions, improvements, new functions, quality metrics, quadrant distribution, analysis warnings)
-10. Post/update PR comment (if `post-comment` is true)
+9. Format PR comment body as markdown (regressions, improvements, new functions, quality metrics, quadrant distribution, analysis warnings)
+10. Upload comment body and analysis data as artifacts for the caller workflow to consume
 11. Set exit code based on threshold enforcement
+
+> **Note**: The reusable workflow requires only `contents: read` permission. PR comment posting is the caller workflow's responsibility (`ci_crapload.yml`), which downloads the comment body artifact and posts it with `pull-requests: write`. This separation enables per-repository customization and avoids passing elevated permissions to the reusable workflow.
 
 ### Per-Function Baseline Comparison
 
