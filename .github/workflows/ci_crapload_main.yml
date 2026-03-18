@@ -18,7 +18,7 @@ permissions:
 jobs:
     crapload-analysis:
         name: Full CRAP Load Analysis
-        uses: ./.github/workflows/reusable_crapload_analysis.yml
+        uses: complytime/org-infra/.github/workflows/reusable_crapload_analysis.yml@main
         permissions:
             contents: read
         with:
@@ -67,7 +67,7 @@ jobs:
 
             - name: Append metrics entry
               run: |
-                  CURRENT="artifact/tmp/crapload-current.json"
+                  CURRENT="artifact/crapload-current.json"
                   if [ ! -f "$CURRENT" ]; then
                     echo "::warning::crapload-current.json not found in artifact. Skipping metrics publish."
                     exit 0
