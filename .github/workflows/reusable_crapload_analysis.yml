@@ -1,0 +1,370 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Reusable CRAP Load Analysis
+
+on:
+    workflow_call:
+        inputs:
+            go-version-file:
+                description: 'Path to go.mod for Go version detection'
+                type: string
+                default: './go.mod'
+            gaze-version:
+                description: 'Gaze version tag to install via go install'
+                type: string
+                default: 'latest'
+            baseline-file:
+                description: 'Path to committed baseline thresholds file'
+                type: string
+                default: '.gaze/baseline.json'
+            packages:
+                description: 'Go packages to analyse'
+                type: string
+                default: './...'
+            coverprofile:
+                description: 'Path to coverage profile'
+                type: string
+                default: 'coverage.out'
+            new-function-threshold:
+                description: 'CRAP score ceiling for new functions with no baseline entry'
+                type: number
+                default: 30
+        outputs:
+            status:
+                description: 'pass or fail'
+                value: ${{ jobs.crapload-analysis.outputs.status }}
+            crapload-count:
+                description: 'Number of functions at or above CRAP threshold'
+                value: ${{ jobs.crapload-analysis.outputs.crapload-count }}
+            gaze-crapload-count:
+                description: 'Number of functions at or above GazeCRAP threshold'
+                value: ${{ jobs.crapload-analysis.outputs.gaze-crapload-count }}
+            regressions-count:
+                description: 'Number of functions that regressed vs baseline'
+                value: ${{ jobs.crapload-analysis.outputs.regressions-count }}
+            improvements-count:
+                description: 'Number of functions that improved vs baseline'
+                value: ${{ jobs.crapload-analysis.outputs.improvements-count }}
+
+permissions:
+    contents: read
+
+jobs:
+    crapload-analysis:
+        name: CRAP Load Analysis
+        runs-on: ubuntu-latest
+        outputs:
+            status: ${{ steps.compare.outputs.status }}
+            crapload-count: ${{ steps.compare.outputs.crapload_count }}
+            gaze-crapload-count: ${{ steps.compare.outputs.gaze_crapload_count }}
+            regressions-count: ${{ steps.compare.outputs.regressions_count }}
+            improvements-count: ${{ steps.compare.outputs.improvements_count }}
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  fetch-depth: 0
+
+            - name: Detect changed packages
+              id: detect-changes
+              if: github.event_name == 'pull_request'
+              run: |
+                  CHANGED_FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}..HEAD" -- '*.go' || true)
+                  if [ -z "$CHANGED_FILES" ]; then
+                    echo "has_changes=false" >> "$GITHUB_OUTPUT"
+                    echo "packages=" >> "$GITHUB_OUTPUT"
+                    echo "No Go files changed in this PR."
+                    exit 0
+                  fi
+                  PACKAGES=$(echo "$CHANGED_FILES" | xargs -I{} dirname {} | sort -u | sed 's|^|./|' | paste -sd ' ')
+                  echo "has_changes=true" >> "$GITHUB_OUTPUT"
+                  echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+                  echo "Changed packages: $PACKAGES"
+
+            - name: Handle no code changes
+              if: github.event_name == 'pull_request' && steps.detect-changes.outputs.has_changes == 'false'
+              id: no-changes
+              run: |
+                  echo "skip=true" >> "$GITHUB_OUTPUT"
+                  printf '%s\n' '<!-- crapload-analysis-marker -->' '## CRAP Load Analysis' '' \
+                    'No Go code changes detected in this PR. No CRAP impact.' > /tmp/crapload-comment-body.md
+
+            - name: Set up Go
+              if: steps.no-changes.outputs.skip != 'true'
+              uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+              with:
+                  go-version-file: ${{ inputs.go-version-file }}
+
+            - name: Install Gaze
+              if: steps.no-changes.outputs.skip != 'true'
+              id: install-gaze
+              env:
+                  GOTOOLCHAIN: auto
+              run: |
+                  echo "Installing gaze@${{ inputs.gaze-version }}..."
+                  go install "github.com/unbound-force/gaze/cmd/gaze@${{ inputs.gaze-version }}"
+                  gaze --version || echo "gaze installed (version flag may not be supported)"
+
+            - name: Generate coverage profile
+              if: steps.no-changes.outputs.skip != 'true'
+              run: |
+                  PKGS="${{ steps.detect-changes.outputs.packages || inputs.packages }}"
+                  echo "Running tests with coverage for: $PKGS"
+                  go test -coverprofile="${{ inputs.coverprofile }}" $PKGS || true
+
+            - name: Run Gaze analysis
+              if: steps.no-changes.outputs.skip != 'true'
+              id: gaze-analysis
+              run: |
+                  PKGS="${{ steps.detect-changes.outputs.packages || inputs.packages }}"
+                  REPO_ROOT="$(pwd)/"
+                  gaze report \
+                    --format=json \
+                    --coverprofile="${{ inputs.coverprofile }}" \
+                    $PKGS 2>/tmp/gaze-stderr.txt \
+                    > /tmp/gaze-report.json || true
+                  echo "Gaze analysis complete."
+                  cat /tmp/gaze-stderr.txt >&2 || true
+                  # Extract CRAP data with path normalisation for baseline compatibility
+                  jq --arg root "$REPO_ROOT" '.crap | (.scores[],.summary.worst_crap[]?,.summary.worst_gaze_crap[]?) |= (.file |= ltrimstr($root))' \
+                    /tmp/gaze-report.json > /tmp/crapload-current.json || true
+
+            - name: Compare against baseline
+              if: steps.no-changes.outputs.skip != 'true'
+              id: compare
+              run: |
+                  BASELINE="${{ inputs.baseline-file }}"
+                  CURRENT="/tmp/crapload-current.json"
+                  NEW_FUNC_THRESHOLD=${{ inputs.new-function-threshold }}
+                  REGRESSIONS=""
+                  IMPROVEMENTS=""
+                  NEW_FUNCTIONS=""
+                  REG_COUNT=0
+                  IMP_COUNT=0
+                  NEW_COUNT=0
+                  NEW_VIOLATIONS=0
+
+                  CRAPLOAD=$(jq -r '.summary.crapload // 0' "$CURRENT")
+                  GAZE_CRAPLOAD=$(jq -r '.summary.gaze_crapload // 0' "$CURRENT")
+                  {
+                    echo "crapload_count=$CRAPLOAD"
+                    echo "gaze_crapload_count=$GAZE_CRAPLOAD"
+                  } >> "$GITHUB_OUTPUT"
+
+                  if [ ! -f "$BASELINE" ]; then
+                    echo "::warning::Baseline file $BASELINE not found. Skipping per-function comparison."
+                    {
+                      echo "status=pass"
+                      echo "regressions_count=0"
+                      echo "improvements_count=0"
+                    } >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+
+                  # Build lookup from baseline: key = file:function (unique across multi-module repos)
+                  jq -r '.scores[] | "\(.file):\(.function)\t\(.crap)\t\(.gaze_crap // 0)"' "$BASELINE" | sort > /tmp/baseline-lookup.tsv
+
+                  # Process current scores
+                  while IFS=$'\t' read -r key crap gaze_crap; do
+                    baseline_line=$(grep "^${key}	" /tmp/baseline-lookup.tsv || true)
+                    if [ -z "$baseline_line" ]; then
+                      # New function
+                      NEW_COUNT=$((NEW_COUNT + 1))
+                      status_icon="+"
+                      if [ "$(echo "$crap > $NEW_FUNC_THRESHOLD" | bc -l)" = "1" ]; then
+                        NEW_VIOLATIONS=$((NEW_VIOLATIONS + 1))
+                        status_icon="!+"
+                      fi
+                      NEW_FUNCTIONS="${NEW_FUNCTIONS}| ${status_icon} | \`${key}\` | ${crap} | ${gaze_crap} | new (threshold: ${NEW_FUNC_THRESHOLD}) |\n"
+                    else
+                      b_crap=$(echo "$baseline_line" | cut -f2)
+                      b_gaze=$(echo "$baseline_line" | cut -f3)
+                      crap_diff=$(echo "$crap - $b_crap" | bc -l)
+                      gaze_diff=$(echo "$gaze_crap - $b_gaze" | bc -l)
+                      has_regression=false
+                      has_improvement=false
+
+                      if [ "$(echo "$crap > $b_crap" | bc -l)" = "1" ]; then
+                        has_regression=true
+                      elif [ "$(echo "$crap < $b_crap" | bc -l)" = "1" ]; then
+                        has_improvement=true
+                      fi
+                      if [ "$(echo "$gaze_crap > $b_gaze" | bc -l)" = "1" ]; then
+                        has_regression=true
+                      elif [ "$(echo "$gaze_crap < $b_gaze" | bc -l)" = "1" ]; then
+                        has_improvement=true
+                      fi
+
+                      if [ "$has_regression" = "true" ]; then
+                        REG_COUNT=$((REG_COUNT + 1))
+                        REGRESSIONS="${REGRESSIONS}| \`${key}\` | ${b_crap} | ${crap} | ${crap_diff} | ${b_gaze} | ${gaze_crap} | ${gaze_diff} |\n"
+                      elif [ "$has_improvement" = "true" ]; then
+                        IMP_COUNT=$((IMP_COUNT + 1))
+                        IMPROVEMENTS="${IMPROVEMENTS}| \`${key}\` | ${b_crap} | ${crap} | ${crap_diff} | ${b_gaze} | ${gaze_crap} | ${gaze_diff} |\n"
+                      fi
+                    fi
+                  done < <(jq -r '.scores[] | "\(.file):\(.function)\t\(.crap)\t\(.gaze_crap // 0)"' "$CURRENT" | sort)
+
+                  {
+                    echo "regressions_count=$REG_COUNT"
+                    echo "improvements_count=$IMP_COUNT"
+                  } >> "$GITHUB_OUTPUT"
+
+                  TOTAL_FAILURES=$((REG_COUNT + NEW_VIOLATIONS))
+                  if [ "$TOTAL_FAILURES" -gt 0 ]; then
+                    echo "status=fail" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "status=pass" >> "$GITHUB_OUTPUT"
+                  fi
+
+                  if [ "$TOTAL_FAILURES" -gt 0 ]; then
+                    echo "::error::CRAP regressions detected: $REG_COUNT regression(s), $NEW_VIOLATIONS new function violation(s)"
+                  fi
+
+                  # Build PR comment body
+                  STATUS_BADGE="&#x2705;"
+                  STATUS_TEXT="PASS"
+                  if [ "$TOTAL_FAILURES" -gt 0 ]; then
+                    STATUS_BADGE="&#x274C;"
+                    STATUS_TEXT="FAIL"
+                  fi
+
+                  AVG_COMPLEXITY=$(jq -r '(.summary.avg_complexity // 0) * 10 | round / 10' "$CURRENT")
+                  AVG_LINE_COV=$(jq -r '(.summary.avg_line_coverage // 0) * 10 | round / 10' "$CURRENT")
+                  AVG_CRAP=$(jq -r '(.summary.avg_crap // 0) * 10 | round / 10' "$CURRENT")
+                  CRAP_THRESH=$(jq -r '.summary.crap_threshold // 15' "$CURRENT")
+                  AVG_CONTRACT_COV=$(jq -r '(.summary.avg_contract_coverage // 0) * 10 | round / 10' "$CURRENT")
+                  AVG_GAZE_CRAP=$(jq -r '(.summary.avg_gaze_crap // 0) * 10 | round / 10' "$CURRENT")
+                  GAZE_CRAP_THRESH=$(jq -r '.summary.gaze_crap_threshold // 15' "$CURRENT")
+                  TOTAL_FUNCS=$(jq -r '.summary.total_functions // 0' "$CURRENT")
+
+                  {
+                    echo "<!-- crapload-analysis-marker -->"
+                    echo "## ${STATUS_BADGE} CRAP Load Analysis: ${STATUS_TEXT}"
+                    echo ""
+                    echo "### Summary"
+                    echo ""
+                    echo "| Metric | Value |"
+                    echo "|--------|-------|"
+                    echo "| Functions analysed | ${TOTAL_FUNCS} |"
+                    echo "| Avg complexity | ${AVG_COMPLEXITY} |"
+                    echo "| Avg line coverage | ${AVG_LINE_COV}% |"
+                    echo "| Avg CRAP score | ${AVG_CRAP} |"
+                    echo "| CRAPload (>= ${CRAP_THRESH}) | ${CRAPLOAD} |"
+                    echo "| Avg contract coverage | ${AVG_CONTRACT_COV}% |"
+                    echo "| Avg GazeCRAP score | ${AVG_GAZE_CRAP} |"
+                    echo "| GazeCRAPload (>= ${GAZE_CRAP_THRESH}) | ${GAZE_CRAPLOAD} |"
+                    echo "| Regressions | ${REG_COUNT} |"
+                    echo "| Improvements | ${IMP_COUNT} |"
+                    echo "| New functions | ${NEW_COUNT} |"
+                  } > /tmp/crapload-comment-body.md
+
+                  # Quality metrics from gaze report
+                  QUALITY_COV=$(jq -r '(.quality.summary.average_contract_coverage // empty) * 10 | round / 10' /tmp/gaze-report.json 2>/dev/null || true)
+                  if [ -n "$QUALITY_COV" ]; then
+                    QUALITY_OVERSPEC=$(jq -r '(.quality.summary.average_over_specification // 0) * 10 | round / 10' /tmp/gaze-report.json 2>/dev/null || echo "0")
+                    {
+                      echo "| Avg contract coverage (quality) | ${QUALITY_COV}% |"
+                      echo "| Avg over-specification | ${QUALITY_OVERSPEC}% |"
+                    } >> /tmp/crapload-comment-body.md
+                  fi
+
+                  # Quadrant distribution from gaze report
+                  Q1=$(jq -r '.crap.summary.quadrant_counts.Q1_Safe // empty' /tmp/gaze-report.json 2>/dev/null || true)
+                  if [ -n "$Q1" ]; then
+                    Q2=$(jq -r '.crap.summary.quadrant_counts.Q2_ComplexButTested // 0' /tmp/gaze-report.json)
+                    Q3=$(jq -r '.crap.summary.quadrant_counts.Q3_SimpleButUnderspecified // 0' /tmp/gaze-report.json)
+                    Q4=$(jq -r '.crap.summary.quadrant_counts.Q4_Dangerous // 0' /tmp/gaze-report.json)
+                    {
+                      echo ""
+                      echo "### Quadrant Distribution"
+                      echo ""
+                      echo "| Quadrant | Count |"
+                      echo "|----------|-------|"
+                      echo "| Q1 Safe | ${Q1} |"
+                      echo "| Q2 Complex but Tested | ${Q2} |"
+                      echo "| Q3 Simple but Underspecified | ${Q3} |"
+                      echo "| Q4 Dangerous | ${Q4} |"
+                    } >> /tmp/crapload-comment-body.md
+                  fi
+
+                  if [ -n "$REGRESSIONS" ]; then
+                    {
+                      echo ""
+                      echo "### Regressions"
+                      echo ""
+                      echo "| Function | Baseline CRAP | Current CRAP | Delta | Baseline GazeCRAP | Current GazeCRAP | Delta |"
+                      echo "|----------|---------------|--------------|-------|-------------------|------------------|-------|"
+                      printf '%b' "$REGRESSIONS"
+                    } >> /tmp/crapload-comment-body.md
+                  fi
+
+                  if [ -n "$IMPROVEMENTS" ]; then
+                    {
+                      echo ""
+                      echo "### Improvements"
+                      echo ""
+                      echo "| Function | Baseline CRAP | Current CRAP | Delta | Baseline GazeCRAP | Current GazeCRAP | Delta |"
+                      echo "|----------|---------------|--------------|-------|-------------------|------------------|-------|"
+                      printf '%b' "$IMPROVEMENTS"
+                    } >> /tmp/crapload-comment-body.md
+                  fi
+
+                  if [ -n "$NEW_FUNCTIONS" ]; then
+                    {
+                      echo ""
+                      echo "### New Functions"
+                      echo ""
+                      echo "| Status | Function | CRAP | GazeCRAP | Note |"
+                      echo "|--------|----------|------|----------|------|"
+                      printf '%b' "$NEW_FUNCTIONS"
+                    } >> /tmp/crapload-comment-body.md
+                  fi
+
+                  # Analysis warnings from gaze report
+                  FAILED_STEPS=$(jq -r '.errors | to_entries[] | select(.value != null) | "- **\(.key)**: \(.value)"' /tmp/gaze-report.json 2>/dev/null || true)
+                  if [ -n "$FAILED_STEPS" ]; then
+                    {
+                      echo ""
+                      echo "### Analysis Warnings"
+                      echo ""
+                      echo "$FAILED_STEPS"
+                    } >> /tmp/crapload-comment-body.md
+                  fi
+
+                  {
+                    echo ""
+                    echo "[View full analysis logs](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+                  } >> /tmp/crapload-comment-body.md
+
+            - name: Write step summary
+              if: github.event_name == 'pull_request'
+              run: cat /tmp/crapload-comment-body.md >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Upload analysis artifact
+              uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+              with:
+                  name: crapload-analysis
+                  path: /tmp/crapload-comment-body.md
+                  retention-days: 30
+
+            - name: Upload detailed analysis
+              if: steps.no-changes.outputs.skip != 'true'
+              uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+              with:
+                  name: crapload-analysis-detailed
+                  path: |
+                      /tmp/gaze-report.json
+                      /tmp/crapload-current.json
+                  retention-days: 30
+
+            - name: Enforce threshold
+              if: steps.no-changes.outputs.skip != 'true'
+              run: |
+                  STATUS="${{ steps.compare.outputs.status }}"
+                  if [ "$STATUS" = "fail" ]; then
+                    echo "::error::CRAP load check failed. See PR comment for details."
+                    exit 1
+                  fi
+                  echo "CRAP load check passed."
