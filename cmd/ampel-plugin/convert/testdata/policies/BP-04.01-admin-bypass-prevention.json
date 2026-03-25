@@ -13,7 +13,7 @@
       "code": "(has(predicates[0].data.values) && type(predicates[0].data.values) == list && predicates[0].data.values.exists(rule, rule.type == \"non_fast_forward\")) || (has(predicates[0].data.values) && type(predicates[0].data.values) != list && has(predicates[0].data.values.push_access_levels) && (size(predicates[0].data.values.push_access_levels) == 0 || predicates[0].data.values.push_access_levels.exists(level, level.access_level == 0)))",
       "predicates": {
         "types": [
-          "http://github.com/carabiner-dev/snappy/specs/branch-rules.yaml",
+          "http://github.com/carabiner-dev/snappy/specs/github/branch-rules.yaml",
           "http://github.com/carabiner-dev/snappy/specs/gitlab/branch-protection.yaml"
         ]
       },
