@@ -31,7 +31,6 @@ dist
 
 # testing complytime created by openscap-plugin
 user_workspace
-complytime.yaml
 complyctl.log
 .complytime
 
