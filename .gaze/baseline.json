@@ -214,7 +214,7 @@
       "package": "scan",
       "function": "(ExecRunner).Run",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 54,
+      "line": 61,
       "complexity": 1,
       "line_coverage": 0,
       "crap": 2
@@ -223,7 +223,7 @@
       "package": "scan",
       "function": "(ExecRunner).RunWithEnv",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 60,
+      "line": 67,
       "complexity": 1,
       "line_coverage": 0,
       "crap": 2
@@ -232,7 +232,7 @@
       "package": "scan",
       "function": "buildTokenEnv",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 69,
+      "line": 76,
       "complexity": 4,
       "line_coverage": 100,
       "crap": 4
@@ -241,19 +241,19 @@
       "package": "scan",
       "function": "WriteSpecFiles",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 88,
-      "complexity": 3,
-      "line_coverage": 71.42857142857143,
-      "crap": 3.2099125364431487,
+      "line": 95,
+      "complexity": 5,
+      "line_coverage": 69.23076923076923,
+      "crap": 5.728265817023214,
       "contract_coverage": 0,
-      "gaze_crap": 12,
-      "quadrant": "Q1_Safe"
+      "gaze_crap": 30,
+      "quadrant": "Q3_SimpleButUnderspecified"
     },
     {
       "package": "scan",
       "function": "ResolveSpecPath",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 107,
+      "line": 126,
       "complexity": 6,
       "line_coverage": 100,
       "crap": 6,
@@ -265,7 +265,7 @@
       "package": "scan",
       "function": "sanitizeSpecName",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 126,
+      "line": 145,
       "complexity": 2,
       "line_coverage": 100,
       "crap": 2
@@ -274,16 +274,16 @@
       "package": "scan",
       "function": "constructSnappyCommand",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 138,
-      "complexity": 1,
+      "line": 159,
+      "complexity": 2,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 2
     },
     {
       "package": "scan",
       "function": "constructAmpelVerifyCommand",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 152,
+      "line": 184,
       "complexity": 1,
       "line_coverage": 100,
       "crap": 1
@@ -292,7 +292,7 @@
       "package": "scan",
       "function": "extractSubjectHash",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 177,
+      "line": 209,
       "complexity": 2,
       "line_coverage": 75,
       "crap": 2.0625
@@ -301,7 +301,7 @@
       "package": "scan",
       "function": "extractHashFromStatement",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 185,
+      "line": 217,
       "complexity": 5,
       "line_coverage": 100,
       "crap": 5
@@ -310,12 +310,12 @@
       "package": "scan",
       "function": "ScanRepository",
       "file": "cmd/ampel-plugin/scan/scan.go",
-      "line": 205,
-      "complexity": 10,
-      "line_coverage": 88.88888888888889,
-      "crap": 10.137174211248286,
+      "line": 237,
+      "complexity": 11,
+      "line_coverage": 89.74358974358974,
+      "crap": 11.13054839090342,
       "contract_coverage": 0,
-      "gaze_crap": 110,
+      "gaze_crap": 132,
       "quadrant": "Q3_SimpleButUnderspecified"
     },
     {
@@ -398,18 +398,18 @@
       "function": "ParseRepoURL",
       "file": "cmd/ampel-plugin/targets/targets.go",
       "line": 15,
-      "complexity": 7,
-      "line_coverage": 94.44444444444444,
-      "crap": 7.008401920438957,
+      "complexity": 9,
+      "line_coverage": 95.65217391304348,
+      "crap": 9.006657351853374,
       "contract_coverage": 0,
-      "gaze_crap": 56,
+      "gaze_crap": 90,
       "quadrant": "Q3_SimpleButUnderspecified"
     },
     {
       "package": "targets",
       "function": "SanitizeRepoURL",
       "file": "cmd/ampel-plugin/targets/targets.go",
-      "line": 49,
+      "line": 59,
       "complexity": 7,
       "line_coverage": 100,
       "crap": 7,
@@ -421,7 +421,7 @@
       "package": "targets",
       "function": "RepoDisplayName",
       "file": "cmd/ampel-plugin/targets/targets.go",
-      "line": 70,
+      "line": 80,
       "complexity": 2,
       "line_coverage": 100,
       "crap": 2,
@@ -1689,8 +1689,11 @@
       "file": "internal/cache/cache.go",
       "line": 44,
       "complexity": 1,
-      "line_coverage": 0,
-      "crap": 2
+      "line_coverage": 100,
+      "crap": 1,
+      "contract_coverage": 0,
+      "gaze_crap": 2,
+      "quadrant": "Q1_Safe"
     },
     {
       "package": "cache",
@@ -1850,11 +1853,11 @@
       "function": "(*Sync).SyncPolicy",
       "file": "internal/cache/sync.go",
       "line": 28,
-      "complexity": 10,
+      "complexity": 11,
       "line_coverage": 85,
-      "crap": 10.3375,
+      "crap": 11.408375,
       "contract_coverage": 0,
-      "gaze_crap": 110,
+      "gaze_crap": 132,
       "quadrant": "Q3_SimpleButUnderspecified"
     },
     {
@@ -3501,18 +3504,18 @@
   ],
   "summary": {
     "total_functions": 364,
-    "avg_complexity": 3.7472527472527473,
-    "avg_line_coverage": 26.11380511180257,
-    "avg_crap": 20.79793679567501,
+    "avg_complexity": 3.7664835164835164,
+    "avg_line_coverage": 26.388158485773722,
+    "avg_crap": 20.816016075597126,
     "crapload": 100,
     "crap_threshold": 15,
-    "gaze_crapload": 31,
+    "gaze_crapload": 32,
     "gaze_crap_threshold": 15,
-    "avg_gaze_crap": 46.76182432432432,
-    "avg_contract_coverage": 15.54054054054054,
+    "avg_gaze_crap": 47.445,
+    "avg_contract_coverage": 15.333333333333334,
     "quadrant_counts": {
       "Q1_Safe": 43,
-      "Q3_SimpleButUnderspecified": 24,
+      "Q3_SimpleButUnderspecified": 25,
       "Q4_Dangerous": 7
     },
     "worst_crap": [
@@ -3603,6 +3606,18 @@
         "quadrant": "Q4_Dangerous"
       },
       {
+        "package": "scan",
+        "function": "ScanRepository",
+        "file": "cmd/ampel-plugin/scan/scan.go",
+        "line": 237,
+        "complexity": 11,
+        "line_coverage": 89.74358974358974,
+        "crap": 11.13054839090342,
+        "contract_coverage": 0,
+        "gaze_crap": 132,
+        "quadrant": "Q3_SimpleButUnderspecified"
+      },
+      {
         "package": "doctor",
         "function": "CheckPolicyActivePeriod",
         "file": "internal/doctor/doctor.go",
@@ -3612,18 +3627,6 @@
         "crap": 11.044096209912537,
         "contract_coverage": 0,
         "gaze_crap": 132,
-        "quadrant": "Q3_SimpleButUnderspecified"
-      },
-      {
-        "package": "server",
-        "function": "(*PluginServer).Generate",
-        "file": "cmd/ampel-plugin/server/server.go",
-        "line": 54,
-        "complexity": 10,
-        "line_coverage": 88.46153846153847,
-        "crap": 10.153618570778335,
-        "contract_coverage": 0,
-        "gaze_crap": 110,
         "quadrant": "Q3_SimpleButUnderspecified"
       }
     ]
