@@ -23,18 +23,6 @@ jobs:
             id-token: write # for keyless signing
 
         steps:
-            - name: Validate Tag
-              run: |
-                  if [[ "${GITHUB_REF:0:10}" != refs/tags/ ]]; then
-                      echo 'Full Release workflow must be run with a tag, not a branch.'
-                      exit 1
-                  fi
-                  tag="${GITHUB_REF:10}"
-                  if ! grep -E '^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' <<<"$tag"; then
-                      echo 'Invalid tag format. Must be semver with only major, minor, and patch, e.g. v1.2.3'
-                      exit 1
-                  fi
-
             - name: Checkout Code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
