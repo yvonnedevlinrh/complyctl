@@ -79,6 +79,7 @@ func Run(cfg *complytime.WorkspaceConfig, configPath, providerDir, cacheDir stri
 	results = append(results, CheckPolicyVersions(cfg, cacheDir, versionResolver)...)
 	results = append(results, CheckPolicyActivePeriod(cfg, resolver, verbose)...)
 	results = append(results, CheckVariables(cfg, healthData, resolver, verbose)...)
+	results = append(results, CheckCollector(cfg)...)
 	return results
 }
 
@@ -637,6 +638,59 @@ func unmappedReason(resolver PolicyGraphResolver, resolveFailures int) string {
 		return fmt.Sprintf("policy graph unresolved (%d error(s)) — run complyctl get", resolveFailures)
 	}
 	return "evaluator not referenced by any cached policy"
+}
+
+// CheckCollector validates collector configuration when present.
+// Non-blocking — the collector is optional. When configured, checks that the
+// endpoint format looks valid and auth fields are complete.
+func CheckCollector(cfg *complytime.WorkspaceConfig) []CheckResult {
+	if cfg.Collector == nil {
+		return []CheckResult{{
+			Name:    "collector",
+			Status:  StatusPass,
+			Message: "no collector configured (optional — needed for --format otel)",
+		}}
+	}
+
+	if cfg.Collector.Endpoint == "" {
+		return []CheckResult{{
+			Name:    "collector",
+			Status:  StatusFail,
+			Message: "collector.endpoint is empty",
+		}}
+	}
+
+	var results []CheckResult
+	results = append(results, CheckResult{
+		Name:    "collector",
+		Status:  StatusPass,
+		Message: fmt.Sprintf("collector endpoint: %s", cfg.Collector.Endpoint),
+	})
+
+	if cfg.Collector.Auth != nil {
+		auth := cfg.Collector.Auth
+		if auth.TokenEndpoint == "" {
+			results = append(results, CheckResult{
+				Name:    "collector-auth",
+				Status:  StatusWarn,
+				Message: "collector.auth.token-endpoint is empty — OIDC auth will not work",
+			})
+		} else if auth.ClientID == "" || auth.ClientSecret == "" {
+			results = append(results, CheckResult{
+				Name:    "collector-auth",
+				Status:  StatusWarn,
+				Message: "collector.auth client-id or client-secret missing — OIDC auth will fail",
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:    "collector-auth",
+				Status:  StatusPass,
+				Message: fmt.Sprintf("OIDC client credentials configured (token-endpoint: %s)", auth.TokenEndpoint),
+			})
+		}
+	}
+
+	return results
 }
 
 func joinNames(names []string) string {
