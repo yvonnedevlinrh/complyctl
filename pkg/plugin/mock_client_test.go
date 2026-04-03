@@ -52,3 +52,10 @@ func (m *mockClient) Scan(_ context.Context, _ *plugin.ScanRequest) (*plugin.Sca
 	}
 	return &plugin.ScanResponse{Assessments: assessments}, nil
 }
+
+func (m *mockClient) Export(_ context.Context, _ *plugin.ExportRequest) (*plugin.ExportResponse, error) {
+	return &plugin.ExportResponse{
+		Success:      false,
+		ErrorMessage: "mock plugin does not support export",
+	}, nil
+}
