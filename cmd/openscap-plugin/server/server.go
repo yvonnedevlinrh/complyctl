@@ -261,6 +261,13 @@ func findOVALCheckContentRef(rule *xmlquery.Node) *xmlquery.Node {
 	return nil
 }
 
+func (s *PluginServer) Export(_ context.Context, _ *plugin.ExportRequest) (*plugin.ExportResponse, error) {
+	return &plugin.ExportResponse{
+		Success:      false,
+		ErrorMessage: "openscap plugin does not yet support export",
+	}, nil
+}
+
 // mergeVariables combines global and target variable maps into a single
 // config map. Target variables override global ones for the same key.
 func mergeVariables(global, target map[string]string) map[string]string {

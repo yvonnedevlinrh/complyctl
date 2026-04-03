@@ -19,6 +19,7 @@ type Plugin interface {
 	Describe(ctx context.Context, req *DescribeRequest) (*DescribeResponse, error)
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 	Scan(ctx context.Context, req *ScanRequest) (*ScanResponse, error)
+	Export(ctx context.Context, req *ExportRequest) (*ExportResponse, error)
 }
 
 // Manager handles plugin discovery, lifecycle, and request routing.
@@ -30,8 +31,9 @@ type Manager struct {
 
 // LoadedPlugin pairs discovery metadata with a live gRPC client.
 type LoadedPlugin struct {
-	Info   PluginInfo
-	Client Plugin
+	Info           PluginInfo
+	Client         Plugin
+	SupportsExport bool
 }
 
 func NewManager(pluginDir string, logger hclog.Logger) (*Manager, error) {
@@ -79,8 +81,9 @@ func (m *Manager) LoadPlugins() error {
 		}
 
 		lp := &LoadedPlugin{
-			Info:   info,
-			Client: client,
+			Info:           info,
+			Client:         client,
+			SupportsExport: descResp.SupportsExport,
 		}
 
 		m.plugins[info.EvaluatorID] = lp
@@ -213,6 +216,24 @@ func (m *Manager) scanErrorMessage(pluginID string, scanErr error, ctx context.C
 			"\n  - Check .complytime/complyctl.log"
 	}
 	return msg
+}
+
+// RouteExport dispatches an ExportRequest to the plugin matching evaluatorID.
+// Only plugins that declared supports_export=true are eligible.
+func (m *Manager) RouteExport(ctx context.Context, evaluatorID string, req *ExportRequest) (*ExportResponse, error) {
+	p, err := m.GetPlugin(evaluatorID)
+	if err != nil {
+		return nil, fmt.Errorf("no plugin registered for evaluator %q: %w", evaluatorID, err)
+	}
+	if !p.SupportsExport {
+		return nil, fmt.Errorf("plugin %s does not support export", p.Info.PluginID)
+	}
+	m.logger.Info("Exporting via plugin", "plugin_id", p.Info.PluginID, "evaluator_id", evaluatorID)
+	resp, exportErr := p.GetClient().Export(ctx, req)
+	if exportErr != nil {
+		return nil, fmt.Errorf("plugin %s export failed: %w", p.Info.PluginID, exportErr)
+	}
+	return resp, nil
 }
 
 func errorAssessments(evaluatorID string, message string) []AssessmentLog {

@@ -28,6 +28,7 @@ func (s *grpcServer) Describe(ctx context.Context, _ *proto.DescribeRequest) (*p
 		ErrorMessage:            resp.ErrorMessage,
 		RequiredGlobalVariables: resp.RequiredGlobalVariables,
 		RequiredTargetVariables: resp.RequiredTargetVariables,
+		SupportsExport:          resp.SupportsExport,
 	}, nil
 }
 
@@ -91,6 +92,30 @@ func (s *grpcServer) Scan(ctx context.Context, req *proto.ScanRequest) (*proto.S
 	}
 
 	return &proto.ScanResponse{Assessments: protoAssessments}, nil
+}
+
+func (s *grpcServer) Export(ctx context.Context, req *proto.ExportRequest) (*proto.ExportResponse, error) {
+	var collector CollectorConfig
+	if req.GetCollector() != nil {
+		collector = CollectorConfig{
+			Endpoint:  req.GetCollector().GetEndpoint(),
+			AuthToken: req.GetCollector().GetAuthToken(),
+		}
+	}
+
+	resp, err := s.impl.Export(ctx, &ExportRequest{
+		Collector: collector,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &proto.ExportResponse{
+		Success:       resp.Success,
+		ExportedCount: resp.ExportedCount,
+		FailedCount:   resp.FailedCount,
+		ErrorMessage:  resp.ErrorMessage,
+	}, nil
 }
 
 func internalResultToProto(r Result) proto.Result {
