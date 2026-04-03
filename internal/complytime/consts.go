@@ -26,6 +26,7 @@ const (
 	OutputFormatOSCAL  = "oscal"
 	OutputFormatPretty = "pretty"
 	OutputFormatSARIF  = "sarif"
+	OutputFormatOTEL   = "otel"
 )
 
 const ScanOutputDir = "scan"
