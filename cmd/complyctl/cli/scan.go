@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/complytime/complyctl/internal/cache"
 	"github.com/complytime/complyctl/internal/complytime"
@@ -39,7 +41,8 @@ func scanCmd(common *Common) *cobra.Command {
 		Example: `complyctl scan --policy-id nist-800-53-r5
   complyctl scan --policy-id nist-800-53-r5 --format pretty
   complyctl scan --policy-id nist-800-53-r5 --format oscal
-  complyctl scan --policy-id nist-800-53-r5 --format sarif`,
+  complyctl scan --policy-id nist-800-53-r5 --format sarif
+  complyctl scan --policy-id nist-800-53-r5 --format otel`,
 		SilenceUsage:      true,
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
@@ -54,13 +57,13 @@ func scanCmd(common *Common) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&o.policyID, "policy-id", "p", "", "Policy ID to scan (see complyctl list)")
-	cmd.Flags().StringVarP(&o.format, "format", "f", "", "Output format: oscal, pretty, sarif")
+	cmd.Flags().StringVarP(&o.format, "format", "f", "", "Output format: oscal, pretty, sarif, otel")
 	cmd.Flags().DurationVarP(&o.timeout, "timeout", "t", complytime.DefaultCommandTimeout, "Maximum time for the scan operation (e.g. 5m, 10m, 1h)")
 	if err := cmd.MarkFlagRequired("policy-id"); err != nil {
 		logger.Error("Failed to mark policy-id as required", "error", err)
 	}
 	if err := cmd.RegisterFlagCompletionFunc("format", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-		return []string{complytime.OutputFormatOSCAL, complytime.OutputFormatPretty, complytime.OutputFormatSARIF}, cobra.ShellCompDirectiveNoFileComp
+		return []string{complytime.OutputFormatOSCAL, complytime.OutputFormatPretty, complytime.OutputFormatSARIF, complytime.OutputFormatOTEL}, cobra.ShellCompDirectiveNoFileComp
 	}); err != nil {
 		logger.Error("Failed to register format completion", "error", err)
 	}
@@ -75,10 +78,10 @@ func scanCmd(common *Common) *cobra.Command {
 func (o *scanOptions) validate() error {
 	if o.format != "" {
 		switch o.format {
-		case complytime.OutputFormatOSCAL, complytime.OutputFormatPretty, complytime.OutputFormatSARIF:
+		case complytime.OutputFormatOSCAL, complytime.OutputFormatPretty, complytime.OutputFormatSARIF, complytime.OutputFormatOTEL:
 		default:
-			return fmt.Errorf("invalid format %q: must be one of %s, %s, %s",
-				o.format, complytime.OutputFormatOSCAL, complytime.OutputFormatPretty, complytime.OutputFormatSARIF)
+			return fmt.Errorf("invalid format %q: must be one of %s, %s, %s, %s",
+				o.format, complytime.OutputFormatOSCAL, complytime.OutputFormatPretty, complytime.OutputFormatSARIF, complytime.OutputFormatOTEL)
 		}
 	}
 	return nil
@@ -105,6 +108,13 @@ func (o *scanOptions) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if o.format == complytime.OutputFormatOTEL {
+		if cfg.Collector == nil || cfg.Collector.Endpoint == "" {
+			return fmt.Errorf("--format otel requires a collector section in complytime.yaml (see docs for configuration)")
+		}
+	}
+
 	if len(cfg.Targets) == 0 {
 		return fmt.Errorf("no targets in complytime.yaml (add targets with policies)")
 	}
@@ -154,7 +164,17 @@ func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceC
 	targetIDs := targetIDList(policyTargets)
 	fmt.Println(output.FormatPreScanSummary(len(assessmentConfigs), evaluatorIDs, targetIDs))
 
-	return runScanAndReport(ctx, o.format, mgr, groups, policyTargets, ref.Repository, eid, graph, targetIDs)
+	if err := runScanAndReport(ctx, o.format, mgr, groups, policyTargets, ref.Repository, eid, graph, targetIDs); err != nil {
+		return err
+	}
+
+	if o.format == complytime.OutputFormatOTEL {
+		if err := o.runExport(ctx, cfg, mgr, groups); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func resolveVersionAndGraph(cacheDir string, ref complytime.PolicyRef) (string, *policy.DependencyGraph, error) {
@@ -406,6 +426,125 @@ func writeOSCALReport(eval *output.Evaluator, reportDir string) error {
 	}
 	fmt.Printf("OSCAL report written: %s\n\n", oscalPath)
 	return nil
+}
+
+// runExport orchestrates evidence export to the configured Beacon collector.
+// Called when --format otel is used, after the scan phase completes.
+func (o *scanOptions) runExport(ctx context.Context, cfg *complytime.WorkspaceConfig, mgr *plugin.Manager, groups map[string]policy.EvaluatorGroup) error {
+	collector := cfg.Collector
+
+	var authToken string
+	if collector.Auth != nil && collector.Auth.TokenEndpoint != "" {
+		if collector.Auth.ClientID == "" || collector.Auth.ClientSecret == "" {
+			return fmt.Errorf("collector auth requires client-id and client-secret when token-endpoint is set")
+		}
+		fmt.Fprintf(os.Stderr, "Resolving OIDC token from %s\n", collector.Auth.TokenEndpoint)
+		token, err := resolveOIDCToken(ctx, collector.Auth)
+		if err != nil {
+			return fmt.Errorf("OIDC token exchange failed: %w", err)
+		}
+		authToken = token
+	}
+
+	exportReq := &plugin.ExportRequest{
+		Collector: plugin.CollectorConfig{
+			Endpoint:  collector.Endpoint,
+			AuthToken: authToken,
+		},
+	}
+
+	var results []exportResult
+
+	for evalID := range groups {
+		p, err := mgr.GetPlugin(evalID)
+		if err != nil {
+			results = append(results, exportResult{pluginID: evalID, evalID: evalID, err: err})
+			continue
+		}
+
+		if !p.SupportsExport {
+			results = append(results, exportResult{pluginID: p.Info.PluginID, evalID: evalID, skipped: true})
+			continue
+		}
+
+		resp, exportErr := mgr.RouteExport(ctx, evalID, exportReq)
+		results = append(results, exportResult{
+			pluginID: p.Info.PluginID,
+			evalID:   evalID,
+			response: resp,
+			err:      exportErr,
+		})
+	}
+
+	fmt.Println(formatExportSummary(results))
+	return nil
+}
+
+func resolveOIDCToken(ctx context.Context, auth *complytime.AuthConfig) (string, error) {
+	cfg := clientcredentials.Config{
+		ClientID:     auth.ClientID,
+		ClientSecret: auth.ClientSecret,
+		TokenURL:     auth.TokenEndpoint,
+	}
+	token, err := cfg.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	return token.AccessToken, nil
+}
+
+func formatExportSummary(results []exportResult) string {
+	var sb strings.Builder
+	sb.WriteString("\nExport Summary\n")
+	fmt.Fprintf(&sb, "%-20s %-10s %-10s %s\n", "PROVIDER", "EXPORTED", "FAILED", "STATUS")
+
+	var hasErrors bool
+	var errorMessages []string
+
+	for _, r := range results {
+		if r.skipped {
+			fmt.Fprintf(&sb, "%-20s %-10s %-10s %s (no export support)\n",
+				r.pluginID, "-", "-", complytime.StatusSkipped)
+			continue
+		}
+		if r.err != nil {
+			fmt.Fprintf(&sb, "%-20s %-10s %-10s %s\n",
+				r.pluginID, "-", "-", complytime.StatusError)
+			hasErrors = true
+			errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", r.pluginID, r.err))
+			continue
+		}
+		if r.response != nil {
+			status := complytime.StatusPassed
+			if r.response.FailedCount > 0 || !r.response.Success {
+				status = complytime.StatusFailed
+				hasErrors = true
+				if r.response.ErrorMessage != "" {
+					errorMessages = append(errorMessages,
+						fmt.Sprintf("%s: %s", r.pluginID, r.response.ErrorMessage))
+				}
+			}
+			fmt.Fprintf(&sb, "%-20s %-10d %-10d %s\n",
+				r.pluginID, r.response.ExportedCount, r.response.FailedCount, status)
+		}
+	}
+
+	if hasErrors {
+		sb.WriteString("\n")
+		for _, msg := range errorMessages {
+			sb.WriteString(msg + "\n")
+		}
+	}
+
+	return sb.String()
+}
+
+type exportResult struct {
+	pluginID string
+	evalID   string
+	response *plugin.ExportResponse
+	skipped  bool
+	err      error
 }
 
 // extractReqToControlMap builds a requirement-ID → control-ID mapping
