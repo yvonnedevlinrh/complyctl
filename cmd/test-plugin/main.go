@@ -64,13 +64,6 @@ func (t *testEvaluator) Scan(_ context.Context, req *plugin.ScanRequest) (*plugi
 	return &plugin.ScanResponse{Assessments: assessments}, nil
 }
 
-func (t *testEvaluator) Export(_ context.Context, _ *plugin.ExportRequest) (*plugin.ExportResponse, error) {
-	return &plugin.ExportResponse{
-		Success:      false,
-		ErrorMessage: "test plugin does not support export",
-	}, nil
-}
-
 func main() {
 	plugin.Serve(&testEvaluator{})
 }

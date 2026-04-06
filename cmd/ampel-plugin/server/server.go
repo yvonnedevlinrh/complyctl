@@ -234,13 +234,6 @@ func (s *PluginServer) Scan(_ context.Context, req *plugin.ScanRequest) (*plugin
 	return scanResponse, nil
 }
 
-func (s *PluginServer) Export(_ context.Context, _ *plugin.ExportRequest) (*plugin.ExportResponse, error) {
-	return &plugin.ExportResponse{
-		Success:      false,
-		ErrorMessage: "ampel plugin does not yet support export",
-	}, nil
-}
-
 // splitCSV splits a comma-separated string into trimmed, non-empty parts.
 func splitCSV(s string) []string {
 	parts := strings.Split(s, ",")

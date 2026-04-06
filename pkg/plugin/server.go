@@ -95,6 +95,14 @@ func (s *grpcServer) Scan(ctx context.Context, req *proto.ScanRequest) (*proto.S
 }
 
 func (s *grpcServer) Export(ctx context.Context, req *proto.ExportRequest) (*proto.ExportResponse, error) {
+	exporter, ok := s.impl.(Exporter)
+	if !ok {
+		return &proto.ExportResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement export",
+		}, nil
+	}
+
 	var collector CollectorConfig
 	if req.GetCollector() != nil {
 		collector = CollectorConfig{
@@ -103,7 +111,7 @@ func (s *grpcServer) Export(ctx context.Context, req *proto.ExportRequest) (*pro
 		}
 	}
 
-	resp, err := s.impl.Export(ctx, &ExportRequest{
+	resp, err := exporter.Export(ctx, &ExportRequest{
 		Collector: collector,
 	})
 	if err != nil {

@@ -10,7 +10,10 @@ import (
 	goplugin "github.com/hashicorp/go-plugin"
 )
 
-var _ Plugin = (*Client)(nil)
+var (
+	_ Plugin   = (*Client)(nil)
+	_ Exporter = (*Client)(nil)
+)
 
 // GenerateRequest carries assessment plan configuration to a plugin.
 // See R48: three-tier variable model.

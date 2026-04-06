@@ -19,6 +19,12 @@ type Plugin interface {
 	Describe(ctx context.Context, req *DescribeRequest) (*DescribeResponse, error)
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 	Scan(ctx context.Context, req *ScanRequest) (*ScanResponse, error)
+}
+
+// Exporter is an optional interface for plugins that support shipping
+// evidence to a Beacon collector. Plugin authors opt in by implementing
+// this interface and declaring supports_export=true in DescribeResponse.
+type Exporter interface {
 	Export(ctx context.Context, req *ExportRequest) (*ExportResponse, error)
 }
 
@@ -219,7 +225,7 @@ func (m *Manager) scanErrorMessage(pluginID string, scanErr error, ctx context.C
 }
 
 // RouteExport dispatches an ExportRequest to the plugin matching evaluatorID.
-// Only plugins that declared supports_export=true are eligible.
+// Only plugins that declared supports_export=true and implement Exporter are eligible.
 func (m *Manager) RouteExport(ctx context.Context, evaluatorID string, req *ExportRequest) (*ExportResponse, error) {
 	p, err := m.GetPlugin(evaluatorID)
 	if err != nil {
@@ -228,8 +234,12 @@ func (m *Manager) RouteExport(ctx context.Context, evaluatorID string, req *Expo
 	if !p.SupportsExport {
 		return nil, fmt.Errorf("plugin %s does not support export", p.Info.PluginID)
 	}
+	exporter, ok := p.GetClient().(Exporter)
+	if !ok {
+		return nil, fmt.Errorf("plugin %s declared supports_export but does not implement Exporter", p.Info.PluginID)
+	}
 	m.logger.Info("Exporting via plugin", "plugin_id", p.Info.PluginID, "evaluator_id", evaluatorID)
-	resp, exportErr := p.GetClient().Export(ctx, req)
+	resp, exportErr := exporter.Export(ctx, req)
 	if exportErr != nil {
 		return nil, fmt.Errorf("plugin %s export failed: %w", p.Info.PluginID, exportErr)
 	}
