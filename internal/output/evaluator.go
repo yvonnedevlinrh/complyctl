@@ -154,6 +154,7 @@ func pluginConfidenceToGemara(c plugin.ConfidenceLevel) gemara.ConfidenceLevel {
 	case plugin.ConfidenceLevelUndetermined:
 		return gemara.Undetermined
 	default:
-		return gemara.NotSet
+		// Unknown plugin values map to Undetermined as the most conservative confidence level.
+		return gemara.Undetermined
 	}
 }
