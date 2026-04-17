@@ -55,6 +55,7 @@ type PolicyGraphResolver interface {
 // See R55: specs/001-gemara-native-workflow/spec.md
 type VersionResolver interface {
 	ResolveLatestVersion(registry, repository string) (version string, err error)
+	ResolveVersion(registry, repository, version string) (string, error)
 }
 
 const registryTimeout = 5 * time.Second
@@ -253,11 +254,23 @@ func CheckPolicyVersions(cfg *complytime.WorkspaceConfig, cacheDir string, versi
 
 		latestVersion, err := versionResolver.ResolveLatestVersion(ref.Registry, ref.Repository)
 		if err != nil {
+			if ref.Version != "" {
+				_, pinnedErr := versionResolver.ResolveVersion(ref.Registry, ref.Repository, ref.Version)
+				if pinnedErr == nil {
+					results = append(results, CheckResult{
+						Name:     fmt.Sprintf("policy/%s", eid),
+						Status:   StatusPass,
+						Message:  fmt.Sprintf("%s (pinned — latest tag unavailable for staleness check)", cachedState.Version),
+						Blocking: false,
+					})
+					continue
+				}
+			}
 			unreachable[ref.Registry] = true
 			results = append(results, CheckResult{
 				Name:     fmt.Sprintf("registry/%s", ref.Registry),
 				Status:   StatusWarn,
-				Message:  "unreachable — version check skipped",
+				Message:  fmt.Sprintf("unreachable: %v", err),
 				Blocking: false,
 			})
 			continue

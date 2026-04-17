@@ -39,6 +39,14 @@ type registryVersionResolver struct {
 }
 
 func (r *registryVersionResolver) ResolveLatestVersion(registryURL, repository string) (string, error) {
+	return r.resolve(registryURL, repository, "")
+}
+
+func (r *registryVersionResolver) ResolveVersion(registryURL, repository, version string) (string, error) {
+	return r.resolve(registryURL, repository, version)
+}
+
+func (r *registryVersionResolver) resolve(registryURL, repository, version string) (string, error) {
 	credFunc, err := registry.NewCredentialFunc()
 	if err != nil {
 		credFunc = nil
@@ -46,11 +54,15 @@ func (r *registryVersionResolver) ResolveLatestVersion(registryURL, repository s
 	client := registry.NewClient(registryURL, credFunc)
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
-	_, version, err := client.DefinitionVersion(ctx, repository)
+	lookup := repository
+	if version != "" {
+		lookup = repository + ":" + version
+	}
+	_, resolved, err := client.DefinitionVersion(ctx, lookup)
 	if err != nil {
 		return "", err
 	}
-	return version, nil
+	return resolved, nil
 }
 
 // See FR-039, R44, R51, R52, R55: specs/001-gemara-native-workflow/spec.md

@@ -17,22 +17,29 @@ import (
 // --- Mock VersionResolver ---
 
 type mockVersionResolver struct {
-	versions     map[string]string // "registry|repo" -> version
-	unreachable  map[string]bool   // registry -> true
-	errOnResolve map[string]error  // "registry|repo" -> error
+	versions       map[string]string // "registry|repo" -> latest version
+	pinnedVersions map[string]string // "registry|repo|version" -> resolved version
+	unreachable    map[string]bool   // registry -> true
+	errOnResolve   map[string]error  // "registry|repo" -> error
+	latestMissing  map[string]bool   // registry -> true (reachable but no latest tag)
 }
 
 func newMockVersionResolver() *mockVersionResolver {
 	return &mockVersionResolver{
-		versions:     make(map[string]string),
-		unreachable:  make(map[string]bool),
-		errOnResolve: make(map[string]error),
+		versions:       make(map[string]string),
+		pinnedVersions: make(map[string]string),
+		unreachable:    make(map[string]bool),
+		errOnResolve:   make(map[string]error),
+		latestMissing:  make(map[string]bool),
 	}
 }
 
 func (m *mockVersionResolver) ResolveLatestVersion(registry, repository string) (string, error) {
 	if m.unreachable[registry] {
 		return "", fmt.Errorf("connection refused")
+	}
+	if m.latestMissing[registry] {
+		return "", fmt.Errorf("OCI version resolution failed for %s/%s:latest: not found", registry, repository)
 	}
 	key := registry + "|" + repository
 	if err, ok := m.errOnResolve[key]; ok {
@@ -42,6 +49,17 @@ func (m *mockVersionResolver) ResolveLatestVersion(registry, repository string) 
 		return v, nil
 	}
 	return "", fmt.Errorf("not found: %s/%s", registry, repository)
+}
+
+func (m *mockVersionResolver) ResolveVersion(registry, repository, version string) (string, error) {
+	if m.unreachable[registry] {
+		return "", fmt.Errorf("connection refused")
+	}
+	key := registry + "|" + repository + "|" + version
+	if v, ok := m.pinnedVersions[key]; ok {
+		return v, nil
+	}
+	return "", fmt.Errorf("not found: %s/%s:%s", registry, repository, version)
 }
 
 // --- Mock PolicyGraphResolver ---
@@ -230,6 +248,76 @@ func TestCheckPolicyVersions_RegistryUnreachable(t *testing.T) {
 	}
 	if results[0].Status != StatusWarn {
 		t.Errorf("expected warn, got %s", results[0].Status)
+	}
+	if !strings.Contains(results[0].Message, "connection refused") {
+		t.Errorf("expected actual error in message, got %q", results[0].Message)
+	}
+}
+
+func TestCheckPolicyVersions_LatestMissing_PinnedResolves(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	state := &cache.State{Policies: map[string]cache.PolicyState{
+		"policies/nist": {Version: "v1.0.0"},
+	}}
+	if err := cache.SaveState(state, tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "reg.io/policies/nist@v1.0.0"},
+		},
+	}
+
+	vr := newMockVersionResolver()
+	vr.latestMissing["reg.io"] = true
+	vr.pinnedVersions["reg.io|policies/nist|v1.0.0"] = "v1.0.0"
+
+	results := CheckPolicyVersions(cfg, tmpDir, vr)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d: %+v", len(results), results)
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected pass for reachable registry with pinned version, got %s: %s",
+			results[0].Status, results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "pinned") {
+		t.Errorf("expected 'pinned' in message, got %q", results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "latest tag unavailable") {
+		t.Errorf("expected 'latest tag unavailable' in message, got %q", results[0].Message)
+	}
+}
+
+func TestCheckPolicyVersions_LatestMissing_NoPinnedVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	state := &cache.State{Policies: map[string]cache.PolicyState{
+		"policies/nist": {Version: "v1.0.0"},
+	}}
+	if err := cache.SaveState(state, tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &complytime.WorkspaceConfig{
+		Policies: []complytime.PolicyEntry{
+			{URL: "reg.io/policies/nist"},
+		},
+	}
+
+	vr := newMockVersionResolver()
+	vr.latestMissing["reg.io"] = true
+
+	results := CheckPolicyVersions(cfg, tmpDir, vr)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d: %+v", len(results), results)
+	}
+	if results[0].Status != StatusWarn {
+		t.Errorf("expected warn, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if results[0].Name != "registry/reg.io" {
+		t.Errorf("expected registry warning, got %q", results[0].Name)
 	}
 }
 
