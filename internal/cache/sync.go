@@ -30,7 +30,12 @@ func (s *Sync) SyncPolicy(ctx context.Context, policyID, version string) error {
 		return fmt.Errorf("policy ID cannot be empty")
 	}
 
-	remoteDigest, remoteVersion, err := s.source.DefinitionVersion(ctx, policyID)
+	lookupRef := policyID
+	if version != "" && version != "latest" {
+		lookupRef = policyID + ":" + version
+	}
+
+	remoteDigest, remoteVersion, err := s.source.DefinitionVersion(ctx, lookupRef)
 	if err != nil {
 		return fmt.Errorf(
 			"policy %s: registry unreachable: %w (cached data may still be available)",

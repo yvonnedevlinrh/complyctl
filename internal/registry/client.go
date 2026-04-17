@@ -53,7 +53,10 @@ func (c *Client) DefinitionVersion(ctx context.Context, modulePath string) (stri
 		return c.fetcher.DefinitionVersion(ctx, modulePath)
 	}
 
-	ref := fmt.Sprintf("%s/%s:latest", c.registryHost(), modulePath)
+	ref := fmt.Sprintf("%s/%s", c.registryHost(), modulePath)
+	if !strings.Contains(modulePath, ":") && !strings.Contains(modulePath, "@") {
+		ref += ":latest"
+	}
 	digest, version, err := c.fetchVersion(ctx, ref)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to fetch version for %s: %w", modulePath, err)
