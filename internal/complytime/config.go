@@ -201,23 +201,26 @@ func resolveEnvVars(config *WorkspaceConfig) error {
 			config.Targets[i].Variables[key] = resolved
 		}
 	}
+	return resolveCollectorEnvVars(config.Collector)
+}
 
-	if config.Collector != nil && config.Collector.Auth != nil {
-		auth := config.Collector.Auth
-		fields := map[string]*string{
-			"collector.auth.client-id":      &auth.ClientID,
-			"collector.auth.client-secret":  &auth.ClientSecret,
-			"collector.auth.token-endpoint": &auth.TokenEndpoint,
-		}
-		for label, ptr := range fields {
-			resolved, err := expandEnvRef(*ptr)
-			if err != nil {
-				return fmt.Errorf("%s: %w", label, err)
-			}
-			*ptr = resolved
-		}
+func resolveCollectorEnvVars(collector *CollectorConfig) error {
+	if collector == nil || collector.Auth == nil {
+		return nil
 	}
-
+	auth := collector.Auth
+	fields := map[string]*string{
+		"collector.auth.client-id":      &auth.ClientID,
+		"collector.auth.client-secret":  &auth.ClientSecret,
+		"collector.auth.token-endpoint": &auth.TokenEndpoint,
+	}
+	for label, ptr := range fields {
+		resolved, err := expandEnvRef(*ptr)
+		if err != nil {
+			return fmt.Errorf("%s: %w", label, err)
+		}
+		*ptr = resolved
+	}
 	return nil
 }
 

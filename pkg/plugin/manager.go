@@ -227,23 +227,31 @@ func (m *Manager) scanErrorMessage(pluginID string, scanErr error, ctx context.C
 // RouteExport dispatches an ExportRequest to the plugin matching evaluatorID.
 // Only plugins that declared supports_export=true and implement Exporter are eligible.
 func (m *Manager) RouteExport(ctx context.Context, evaluatorID string, req *ExportRequest) (*ExportResponse, error) {
+	exporter, pluginID, err := m.resolveExporter(evaluatorID)
+	if err != nil {
+		return nil, err
+	}
+	m.logger.Info("Exporting via plugin", "plugin_id", pluginID, "evaluator_id", evaluatorID)
+	resp, exportErr := exporter.Export(ctx, req)
+	if exportErr != nil {
+		return nil, fmt.Errorf("plugin %s export failed: %w", pluginID, exportErr)
+	}
+	return resp, nil
+}
+
+func (m *Manager) resolveExporter(evaluatorID string) (Exporter, string, error) {
 	p, err := m.GetPlugin(evaluatorID)
 	if err != nil {
-		return nil, fmt.Errorf("no plugin registered for evaluator %q: %w", evaluatorID, err)
+		return nil, "", fmt.Errorf("no plugin registered for evaluator %q: %w", evaluatorID, err)
 	}
 	if !p.SupportsExport {
-		return nil, fmt.Errorf("plugin %s does not support export", p.Info.PluginID)
+		return nil, "", fmt.Errorf("plugin %s does not support export", p.Info.PluginID)
 	}
 	exporter, ok := p.GetClient().(Exporter)
 	if !ok {
-		return nil, fmt.Errorf("plugin %s declared supports_export but does not implement Exporter", p.Info.PluginID)
+		return nil, "", fmt.Errorf("plugin %s declared supports_export but does not implement Exporter", p.Info.PluginID)
 	}
-	m.logger.Info("Exporting via plugin", "plugin_id", p.Info.PluginID, "evaluator_id", evaluatorID)
-	resp, exportErr := exporter.Export(ctx, req)
-	if exportErr != nil {
-		return nil, fmt.Errorf("plugin %s export failed: %w", p.Info.PluginID, exportErr)
-	}
-	return resp, nil
+	return exporter, p.Info.PluginID, nil
 }
 
 func errorAssessments(evaluatorID string, message string) []AssessmentLog {

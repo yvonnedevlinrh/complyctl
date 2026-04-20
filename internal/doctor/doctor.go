@@ -651,7 +651,6 @@ func CheckCollector(cfg *complytime.WorkspaceConfig) []CheckResult {
 			Message: "no collector configured (optional — needed for --format otel)",
 		}}
 	}
-
 	if cfg.Collector.Endpoint == "" {
 		return []CheckResult{{
 			Name:    "collector",
@@ -659,38 +658,37 @@ func CheckCollector(cfg *complytime.WorkspaceConfig) []CheckResult {
 			Message: "collector.endpoint is empty",
 		}}
 	}
-
-	var results []CheckResult
-	results = append(results, CheckResult{
+	results := []CheckResult{{
 		Name:    "collector",
 		Status:  StatusPass,
 		Message: fmt.Sprintf("collector endpoint: %s", cfg.Collector.Endpoint),
-	})
-
+	}}
 	if cfg.Collector.Auth != nil {
-		auth := cfg.Collector.Auth
-		if auth.TokenEndpoint == "" {
-			results = append(results, CheckResult{
-				Name:    "collector-auth",
-				Status:  StatusWarn,
-				Message: "collector.auth.token-endpoint is empty — OIDC auth will not work",
-			})
-		} else if auth.ClientID == "" || auth.ClientSecret == "" {
-			results = append(results, CheckResult{
-				Name:    "collector-auth",
-				Status:  StatusWarn,
-				Message: "collector.auth client-id or client-secret missing — OIDC auth will fail",
-			})
-		} else {
-			results = append(results, CheckResult{
-				Name:    "collector-auth",
-				Status:  StatusPass,
-				Message: fmt.Sprintf("OIDC client credentials configured (token-endpoint: %s)", auth.TokenEndpoint),
-			})
+		results = append(results, checkCollectorAuth(cfg.Collector.Auth))
+	}
+	return results
+}
+
+func checkCollectorAuth(auth *complytime.AuthConfig) CheckResult {
+	if auth.TokenEndpoint == "" {
+		return CheckResult{
+			Name:    "collector-auth",
+			Status:  StatusWarn,
+			Message: "collector.auth.token-endpoint is empty — OIDC auth will not work",
 		}
 	}
-
-	return results
+	if auth.ClientID == "" || auth.ClientSecret == "" {
+		return CheckResult{
+			Name:    "collector-auth",
+			Status:  StatusWarn,
+			Message: "collector.auth client-id or client-secret missing — OIDC auth will fail",
+		}
+	}
+	return CheckResult{
+		Name:    "collector-auth",
+		Status:  StatusPass,
+		Message: fmt.Sprintf("OIDC client credentials configured (token-endpoint: %s)", auth.TokenEndpoint),
+	}
 }
 
 func joinNames(names []string) string {

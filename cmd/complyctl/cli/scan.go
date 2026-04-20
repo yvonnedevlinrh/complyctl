@@ -164,17 +164,21 @@ func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceC
 	targetIDs := targetIDList(policyTargets)
 	fmt.Println(output.FormatPreScanSummary(len(assessmentConfigs), evaluatorIDs, targetIDs))
 
-	if err := runScanAndReport(ctx, o.format, mgr, groups, policyTargets, ref.Repository, eid, graph, targetIDs); err != nil {
+	return o.executeScanPhase(ctx, cfg, mgr, groups, policyTargets, ref.Repository, eid, graph, targetIDs)
+}
+
+func (o *scanOptions) executeScanPhase(ctx context.Context, cfg *complytime.WorkspaceConfig, mgr *plugin.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string) error {
+	if err := runScanAndReport(ctx, o.format, mgr, groups, policyTargets, repository, eid, graph, targetIDs); err != nil {
 		return err
 	}
+	return o.maybeExport(ctx, cfg, mgr, groups)
+}
 
-	if o.format == complytime.OutputFormatOTEL {
-		if err := o.runExport(ctx, cfg, mgr, groups); err != nil {
-			return err
-		}
+func (o *scanOptions) maybeExport(ctx context.Context, cfg *complytime.WorkspaceConfig, mgr *plugin.Manager, groups map[string]policy.EvaluatorGroup) error {
+	if o.format != complytime.OutputFormatOTEL {
+		return nil
 	}
-
-	return nil
+	return o.runExport(ctx, cfg, mgr, groups)
 }
 
 func resolveVersionAndGraph(cacheDir string, ref complytime.PolicyRef) (string, *policy.DependencyGraph, error) {
@@ -433,17 +437,9 @@ func writeOSCALReport(eval *output.Evaluator, reportDir string) error {
 func (o *scanOptions) runExport(ctx context.Context, cfg *complytime.WorkspaceConfig, mgr *plugin.Manager, groups map[string]policy.EvaluatorGroup) error {
 	collector := cfg.Collector
 
-	var authToken string
-	if collector.Auth != nil && collector.Auth.TokenEndpoint != "" {
-		if collector.Auth.ClientID == "" || collector.Auth.ClientSecret == "" {
-			return fmt.Errorf("collector auth requires client-id and client-secret when token-endpoint is set")
-		}
-		fmt.Fprintf(os.Stderr, "Resolving OIDC token from %s\n", collector.Auth.TokenEndpoint)
-		token, err := resolveOIDCToken(ctx, collector.Auth)
-		if err != nil {
-			return fmt.Errorf("OIDC token exchange failed: %w", err)
-		}
-		authToken = token
+	authToken, err := resolveCollectorAuth(ctx, collector.Auth)
+	if err != nil {
+		return err
 	}
 
 	exportReq := &plugin.ExportRequest{
@@ -453,31 +449,60 @@ func (o *scanOptions) runExport(ctx context.Context, cfg *complytime.WorkspaceCo
 		},
 	}
 
-	var results []exportResult
-
-	for evalID := range groups {
-		p, err := mgr.GetPlugin(evalID)
-		if err != nil {
-			results = append(results, exportResult{pluginID: evalID, evalID: evalID, err: err})
-			continue
-		}
-
-		if !p.SupportsExport {
-			results = append(results, exportResult{pluginID: p.Info.PluginID, evalID: evalID, skipped: true})
-			continue
-		}
-
-		resp, exportErr := mgr.RouteExport(ctx, evalID, exportReq)
-		results = append(results, exportResult{
-			pluginID: p.Info.PluginID,
-			evalID:   evalID,
-			response: resp,
-			err:      exportErr,
-		})
-	}
-
+	results := exportToPlugins(ctx, mgr, groups, exportReq)
 	fmt.Println(formatExportSummary(results))
 	return nil
+}
+
+func authRequired(auth *complytime.AuthConfig) bool {
+	return auth != nil && auth.TokenEndpoint != ""
+}
+
+func validateAuthCredentials(auth *complytime.AuthConfig) error {
+	if auth.ClientID == "" || auth.ClientSecret == "" {
+		return fmt.Errorf("collector auth requires client-id and client-secret when token-endpoint is set")
+	}
+	return nil
+}
+
+func resolveCollectorAuth(ctx context.Context, auth *complytime.AuthConfig) (string, error) {
+	if !authRequired(auth) {
+		return "", nil
+	}
+	if err := validateAuthCredentials(auth); err != nil {
+		return "", err
+	}
+	fmt.Fprintf(os.Stderr, "Resolving OIDC token from %s\n", auth.TokenEndpoint)
+	token, err := resolveOIDCToken(ctx, auth)
+	if err != nil {
+		return "", fmt.Errorf("OIDC token exchange failed: %w", err)
+	}
+	return token, nil
+}
+
+func exportToPlugins(ctx context.Context, mgr *plugin.Manager, groups map[string]policy.EvaluatorGroup, req *plugin.ExportRequest) []exportResult {
+	var results []exportResult
+	for evalID := range groups {
+		results = append(results, exportSinglePlugin(ctx, mgr, evalID, req))
+	}
+	return results
+}
+
+func exportSinglePlugin(ctx context.Context, mgr *plugin.Manager, evalID string, req *plugin.ExportRequest) exportResult {
+	p, err := mgr.GetPlugin(evalID)
+	if err != nil {
+		return exportResult{pluginID: evalID, evalID: evalID, err: err}
+	}
+	if !p.SupportsExport {
+		return exportResult{pluginID: p.Info.PluginID, evalID: evalID, skipped: true}
+	}
+	resp, exportErr := mgr.RouteExport(ctx, evalID, req)
+	return exportResult{
+		pluginID: p.Info.PluginID,
+		evalID:   evalID,
+		response: resp,
+		err:      exportErr,
+	}
 }
 
 func resolveOIDCToken(ctx context.Context, auth *complytime.AuthConfig) (string, error) {
@@ -498,38 +523,12 @@ func formatExportSummary(results []exportResult) string {
 	sb.WriteString("\nExport Summary\n")
 	fmt.Fprintf(&sb, "%-20s %-10s %-10s %s\n", "PROVIDER", "EXPORTED", "FAILED", "STATUS")
 
-	var hasErrors bool
 	var errorMessages []string
-
 	for _, r := range results {
-		if r.skipped {
-			fmt.Fprintf(&sb, "%-20s %-10s %-10s %s (no export support)\n",
-				r.pluginID, "-", "-", complytime.StatusSkipped)
-			continue
-		}
-		if r.err != nil {
-			fmt.Fprintf(&sb, "%-20s %-10s %-10s %s\n",
-				r.pluginID, "-", "-", complytime.StatusError)
-			hasErrors = true
-			errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", r.pluginID, r.err))
-			continue
-		}
-		if r.response != nil {
-			status := complytime.StatusPassed
-			if r.response.FailedCount > 0 || !r.response.Success {
-				status = complytime.StatusFailed
-				hasErrors = true
-				if r.response.ErrorMessage != "" {
-					errorMessages = append(errorMessages,
-						fmt.Sprintf("%s: %s", r.pluginID, r.response.ErrorMessage))
-				}
-			}
-			fmt.Fprintf(&sb, "%-20s %-10d %-10d %s\n",
-				r.pluginID, r.response.ExportedCount, r.response.FailedCount, status)
-		}
+		errorMessages = appendExportRow(&sb, r, errorMessages)
 	}
 
-	if hasErrors {
+	if len(errorMessages) > 0 {
 		sb.WriteString("\n")
 		for _, msg := range errorMessages {
 			sb.WriteString(msg + "\n")
@@ -537,6 +536,44 @@ func formatExportSummary(results []exportResult) string {
 	}
 
 	return sb.String()
+}
+
+func appendExportRow(sb *strings.Builder, r exportResult, errors []string) []string {
+	if r.skipped {
+		fmt.Fprintf(sb, "%-20s %-10s %-10s %s (no export support)\n",
+			r.pluginID, "-", "-", complytime.StatusSkipped)
+		return errors
+	}
+	if r.err != nil {
+		fmt.Fprintf(sb, "%-20s %-10s %-10s %s\n",
+			r.pluginID, "-", "-", complytime.StatusError)
+		return append(errors, fmt.Sprintf("%s: %v", r.pluginID, r.err))
+	}
+	return appendResponseRow(sb, r, errors)
+}
+
+func appendResponseRow(sb *strings.Builder, r exportResult, errors []string) []string {
+	if r.response == nil {
+		return errors
+	}
+	status, errMsg := exportResponseStatus(r)
+	fmt.Fprintf(sb, "%-20s %-10d %-10d %s\n",
+		r.pluginID, r.response.ExportedCount, r.response.FailedCount, status)
+	if errMsg != "" {
+		errors = append(errors, errMsg)
+	}
+	return errors
+}
+
+func exportResponseStatus(r exportResult) (string, string) {
+	if r.response.FailedCount > 0 || !r.response.Success {
+		var errMsg string
+		if r.response.ErrorMessage != "" {
+			errMsg = fmt.Sprintf("%s: %s", r.pluginID, r.response.ErrorMessage)
+		}
+		return complytime.StatusFailed, errMsg
+	}
+	return complytime.StatusPassed, ""
 }
 
 type exportResult struct {
