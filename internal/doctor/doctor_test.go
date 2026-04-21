@@ -801,6 +801,114 @@ func TestCheckConfig_MissingFile(t *testing.T) {
 	}
 }
 
+// --- CheckCollector Tests ---
+
+func TestCheckCollector_NilCollector(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{}
+	results := CheckCollector(cfg)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected pass for nil collector, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "no collector") {
+		t.Errorf("expected 'no collector' in message, got %q", results[0].Message)
+	}
+}
+
+func TestCheckCollector_EmptyEndpoint(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Collector: &complytime.CollectorConfig{Endpoint: ""},
+	}
+	results := CheckCollector(cfg)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusFail {
+		t.Errorf("expected fail for empty endpoint, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "endpoint") {
+		t.Errorf("expected 'endpoint' in message, got %q", results[0].Message)
+	}
+}
+
+func TestCheckCollector_ValidEndpointNoAuth(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Collector: &complytime.CollectorConfig{Endpoint: "collector.example.com:4317"},
+	}
+	results := CheckCollector(cfg)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected pass, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "collector.example.com:4317") {
+		t.Errorf("expected endpoint in message, got %q", results[0].Message)
+	}
+}
+
+func TestCheckCollector_ValidEndpointWithCompleteAuth(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Collector: &complytime.CollectorConfig{
+			Endpoint: "collector.example.com:4317",
+			Auth: &complytime.AuthConfig{
+				ClientID:      "my-client",
+				ClientSecret:  "my-secret",
+				TokenEndpoint: "https://idp.example.com/token",
+			},
+		},
+	}
+	results := CheckCollector(cfg)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results (endpoint + auth), got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected pass for endpoint, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if results[1].Status != StatusPass {
+		t.Errorf("expected pass for auth, got %s: %s", results[1].Status, results[1].Message)
+	}
+	if !strings.Contains(results[1].Message, "https://idp.example.com/token") {
+		t.Errorf("expected token-endpoint in auth message, got %q", results[1].Message)
+	}
+}
+
+func TestCheckCollectorAuth_EmptyTokenEndpoint(t *testing.T) {
+	auth := &complytime.AuthConfig{ClientID: "id", ClientSecret: "s"}
+	result := checkCollectorAuth(auth)
+	if result.Status != StatusWarn {
+		t.Errorf("expected warn for empty token-endpoint, got %s: %s", result.Status, result.Message)
+	}
+	if !strings.Contains(result.Message, "token-endpoint") {
+		t.Errorf("expected 'token-endpoint' in message, got %q", result.Message)
+	}
+}
+
+func TestCheckCollectorAuth_MissingClientID(t *testing.T) {
+	auth := &complytime.AuthConfig{TokenEndpoint: "https://idp.example.com/token"}
+	result := checkCollectorAuth(auth)
+	if result.Status != StatusWarn {
+		t.Errorf("expected warn for missing client-id, got %s: %s", result.Status, result.Message)
+	}
+}
+
+func TestCheckCollectorAuth_Complete(t *testing.T) {
+	auth := &complytime.AuthConfig{
+		ClientID:      "id",
+		ClientSecret:  "s",
+		TokenEndpoint: "https://idp.example.com/token",
+	}
+	result := checkCollectorAuth(auth)
+	if result.Status != StatusPass {
+		t.Errorf("expected pass for complete auth, got %s: %s", result.Status, result.Message)
+	}
+	if !strings.Contains(result.Message, "https://idp.example.com/token") {
+		t.Errorf("expected token-endpoint in message, got %q", result.Message)
+	}
+}
+
 // --- Helper Tests ---
 
 func TestCountResolved(t *testing.T) {

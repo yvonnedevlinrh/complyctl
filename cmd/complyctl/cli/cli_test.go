@@ -5,6 +5,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/complytime/complyctl/internal/complytime"
 	"github.com/complytime/complyctl/internal/policy"
+	"github.com/complytime/complyctl/pkg/plugin"
 )
 
 func chdirTemp(t *testing.T) {
@@ -92,10 +94,132 @@ func TestScanOptions_Validate_InvalidFormat(t *testing.T) {
 }
 
 func TestScanOptions_Validate_ValidFormats(t *testing.T) {
-	for _, f := range []string{"", "oscal", "pretty", "sarif"} {
+	for _, f := range []string{"", "oscal", "pretty", "sarif", "otel"} {
 		o := &scanOptions{format: f}
 		assert.NoError(t, o.validate(), "format %q should be valid", f)
 	}
+}
+
+func TestScanOptions_Run_OtelWithoutCollector(t *testing.T) {
+	chdirTemp(t)
+	writeWorkspaceConfig(t, minimalConfig)
+	o := &scanOptions{
+		Common:  &Common{},
+		format:  complytime.OutputFormatOTEL,
+		timeout: 5 * time.Second,
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "collector")
+}
+
+// --- export helpers ---
+
+func TestAuthRequired_NilAuth(t *testing.T) {
+	assert.False(t, authRequired(nil))
+}
+
+func TestAuthRequired_EmptyTokenEndpoint(t *testing.T) {
+	assert.False(t, authRequired(&complytime.AuthConfig{}))
+}
+
+func TestAuthRequired_WithTokenEndpoint(t *testing.T) {
+	assert.True(t, authRequired(&complytime.AuthConfig{TokenEndpoint: "https://idp.example.com/token"}))
+}
+
+func TestValidateAuthCredentials_MissingClientID(t *testing.T) {
+	err := validateAuthCredentials(&complytime.AuthConfig{ClientSecret: "s"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "client-id")
+}
+
+func TestValidateAuthCredentials_MissingClientSecret(t *testing.T) {
+	err := validateAuthCredentials(&complytime.AuthConfig{ClientID: "id"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "client-secret")
+}
+
+func TestValidateAuthCredentials_Valid(t *testing.T) {
+	err := validateAuthCredentials(&complytime.AuthConfig{ClientID: "id", ClientSecret: "s"})
+	require.NoError(t, err)
+}
+
+func TestCountExportFailures_NoneSkipped(t *testing.T) {
+	results := []exportResult{}
+	assert.Equal(t, 0, countExportFailures(results))
+}
+
+func TestCountExportFailures_SkippedNotCounted(t *testing.T) {
+	results := []exportResult{
+		{skipped: true},
+		{skipped: true},
+	}
+	assert.Equal(t, 0, countExportFailures(results))
+}
+
+func TestCountExportFailures_TransportError(t *testing.T) {
+	results := []exportResult{
+		{err: fmt.Errorf("connection refused")},
+		{skipped: true},
+	}
+	assert.Equal(t, 1, countExportFailures(results))
+}
+
+func TestCountExportFailures_ResponseFailure(t *testing.T) {
+	results := []exportResult{
+		{response: &plugin.ExportResponse{Success: false}},
+		{response: &plugin.ExportResponse{Success: true, FailedCount: 3}},
+		{response: &plugin.ExportResponse{Success: true, FailedCount: 0}},
+	}
+	assert.Equal(t, 2, countExportFailures(results))
+}
+
+func TestExportResponseStatus_Success(t *testing.T) {
+	r := exportResult{
+		pluginID: "openscap",
+		response: &plugin.ExportResponse{Success: true, ExportedCount: 5},
+	}
+	status, errMsg := exportResponseStatus(r)
+	assert.Equal(t, complytime.StatusPassed, status)
+	assert.Empty(t, errMsg)
+}
+
+func TestExportResponseStatus_FailedCount(t *testing.T) {
+	r := exportResult{
+		pluginID: "openscap",
+		response: &plugin.ExportResponse{Success: true, FailedCount: 2, ErrorMessage: "timeout"},
+	}
+	status, errMsg := exportResponseStatus(r)
+	assert.Equal(t, complytime.StatusFailed, status)
+	assert.Contains(t, errMsg, "openscap")
+	assert.Contains(t, errMsg, "timeout")
+}
+
+func TestExportResponseStatus_SuccessFalse(t *testing.T) {
+	r := exportResult{
+		pluginID: "openscap",
+		response: &plugin.ExportResponse{Success: false, ErrorMessage: "not yet supported"},
+	}
+	status, errMsg := exportResponseStatus(r)
+	assert.Equal(t, complytime.StatusFailed, status)
+	assert.Contains(t, errMsg, "not yet supported")
+}
+
+func TestFormatExportSummary_MixedResults(t *testing.T) {
+	results := []exportResult{
+		{pluginID: "plugin-a", skipped: true},
+		{pluginID: "plugin-b", err: fmt.Errorf("dial error")},
+		{pluginID: "plugin-c", response: &plugin.ExportResponse{Success: true, ExportedCount: 10}},
+		{pluginID: "plugin-d", response: &plugin.ExportResponse{Success: false, FailedCount: 2, ErrorMessage: "partial failure"}},
+	}
+	out := formatExportSummary(results)
+	assert.Contains(t, out, "plugin-a")
+	assert.Contains(t, out, "no export support")
+	assert.Contains(t, out, "plugin-b")
+	assert.Contains(t, out, "dial error")
+	assert.Contains(t, out, "plugin-c")
+	assert.Contains(t, out, "plugin-d")
+	assert.Contains(t, out, "partial failure")
 }
 
 // --- generateOptions tests ---

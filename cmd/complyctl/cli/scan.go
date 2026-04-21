@@ -451,6 +451,9 @@ func (o *scanOptions) runExport(ctx context.Context, cfg *complytime.WorkspaceCo
 
 	results := exportToPlugins(ctx, mgr, groups, exportReq)
 	fmt.Println(formatExportSummary(results))
+	if failed := countExportFailures(results); failed > 0 {
+		return fmt.Errorf("export failed for %d plugin(s)", failed)
+	}
 	return nil
 }
 
@@ -582,6 +585,26 @@ type exportResult struct {
 	response *plugin.ExportResponse
 	skipped  bool
 	err      error
+}
+
+// countExportFailures returns the number of export results that represent
+// a failure: a transport error or a response where Success is false or
+// FailedCount is non-zero. Skipped plugins are not counted as failures.
+func countExportFailures(results []exportResult) int {
+	count := 0
+	for _, r := range results {
+		if r.skipped {
+			continue
+		}
+		if r.err != nil {
+			count++
+			continue
+		}
+		if r.response != nil && (!r.response.Success || r.response.FailedCount > 0) {
+			count++
+		}
+	}
+	return count
 }
 
 // extractReqToControlMap builds a requirement-ID → control-ID mapping
