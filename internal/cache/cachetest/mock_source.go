@@ -20,8 +20,9 @@ import (
 // Implements cache.PolicySource by pushing OCI content directly into the
 // destination store.
 type MockPolicySource struct {
-	mu       sync.RWMutex
-	policies map[string]*mockPolicyData
+	mu            sync.RWMutex
+	policies      map[string]*mockPolicyData
+	LastLookupRef string
 }
 
 type mockPolicyData struct {
@@ -36,23 +37,32 @@ func NewMockPolicySource() *MockPolicySource {
 	}
 }
 
-// SeedPolicy adds a mock policy for testing
+// SeedPolicy adds a mock policy for testing. The policy is registered under
+// both the bare policyID and the versioned key (policyID:version) so that
+// lookups with an explicit version tag also resolve.
 func (m *MockPolicySource) SeedPolicy(policyID, version, digestStr string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.policies[policyID] = &mockPolicyData{
+	data := &mockPolicyData{
 		digest:  digestStr,
 		version: version,
 	}
+	m.policies[policyID] = data
+	m.policies[policyID+":"+version] = data
 }
 
-// DefinitionVersion returns digest and version for a mock policy
-func (m *MockPolicySource) DefinitionVersion(_ context.Context, policyID string) (string, string, error) {
+// DefinitionVersion returns digest and version for a mock policy.
+// The lookupRef is recorded in LastLookupRef for test assertions.
+func (m *MockPolicySource) DefinitionVersion(_ context.Context, lookupRef string) (string, string, error) {
+	m.mu.Lock()
+	m.LastLookupRef = lookupRef
+	m.mu.Unlock()
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	p, ok := m.policies[policyID]
+	p, ok := m.policies[lookupRef]
 	if !ok {
-		return "", "", fmt.Errorf("policy %s not found", policyID)
+		return "", "", fmt.Errorf("policy %s not found", lookupRef)
 	}
 	return p.digest, p.version, nil
 }

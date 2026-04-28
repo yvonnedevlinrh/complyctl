@@ -53,10 +53,7 @@ func (c *Client) DefinitionVersion(ctx context.Context, modulePath string) (stri
 		return c.fetcher.DefinitionVersion(ctx, modulePath)
 	}
 
-	ref := fmt.Sprintf("%s/%s", c.registryHost(), modulePath)
-	if !strings.Contains(modulePath, ":") && !strings.Contains(modulePath, "@") {
-		ref += ":latest"
-	}
+	ref := buildRef(c.registryHost(), modulePath)
 	digest, version, err := c.fetchVersion(ctx, ref)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to fetch version for %s: %w", modulePath, err)
@@ -81,6 +78,17 @@ func (c *Client) registryHost() string {
 	host = strings.TrimPrefix(host, "http://")
 	host = strings.TrimPrefix(host, "https://")
 	return strings.TrimSuffix(host, "/")
+}
+
+// buildRef constructs a fully qualified OCI reference from a registry host and
+// module path. If the module path already contains a tag (`:`) or digest (`@`),
+// it is used as-is; otherwise `:latest` is appended.
+func buildRef(registryHost, modulePath string) string {
+	ref := fmt.Sprintf("%s/%s", registryHost, modulePath)
+	if !strings.Contains(modulePath, ":") && !strings.Contains(modulePath, "@") {
+		ref += ":latest"
+	}
+	return ref
 }
 
 func (c *Client) newRepository(repoName string) (*remote.Repository, error) {

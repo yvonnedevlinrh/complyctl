@@ -48,6 +48,34 @@ func TestSync_CopyOnSuccess(t *testing.T) {
 	assert.DirExists(t, filepath.Join(storePath, "blobs", "sha256"))
 }
 
+func TestSync_CopyOnSuccess_PinnedVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, "cache")
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))
+
+	mock := cachetest.NewMockPolicySource()
+	mock.SeedPolicy("test-policy", "v1.0.0", "sha256:abc123")
+
+	cacheMgr := cache.NewCache(cacheDir)
+	state, err := cache.LoadState(cacheDir)
+	require.NoError(t, err)
+
+	sync := cache.NewSync(cacheMgr, state, mock)
+
+	err = sync.SyncPolicy(context.Background(), "test-policy", "v1.0.0")
+	require.NoError(t, err)
+
+	assert.Equal(t, "test-policy:v1.0.0", mock.LastLookupRef,
+		"source should receive the versioned ref when a pinned version is provided")
+
+	state2, err := cache.LoadState(cacheDir)
+	require.NoError(t, err)
+	ps, ok := state2.GetPolicyState("test-policy")
+	assert.True(t, ok)
+	assert.Equal(t, "v1.0.0", ps.Version)
+	assert.Equal(t, "sha256:abc123", ps.Digest)
+}
+
 func TestSync_FailureOnMissingPolicy(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheDir := filepath.Join(tmpDir, "cache")
