@@ -49,12 +49,16 @@ type PolicyGraphResolver interface {
 	ResolvePolicyGraph(policyID, version string) (*policy.DependencyGraph, error)
 }
 
-// VersionResolver queries an OCI registry for the latest version of a policy.
+// VersionResolver queries an OCI registry for policy version information.
+// It supports both latest-tag resolution for staleness checks and pinned
+// version resolution for reachability verification.
 // Satisfied by the adapter in cmd/complyctl/cli/doctor.go — defined as
 // interface for testability (Constitution II).
 // See R55: specs/001-gemara-native-workflow/spec.md
 type VersionResolver interface {
+	// ResolveLatestVersion resolves the latest tag for staleness comparison.
 	ResolveLatestVersion(registry, repository string) (version string, err error)
+	// ResolveVersion verifies that a specific pinned version exists in the registry.
 	ResolveVersion(registry, repository, version string) (string, error)
 }
 
@@ -254,25 +258,11 @@ func CheckPolicyVersions(cfg *complytime.WorkspaceConfig, cacheDir string, versi
 
 		latestVersion, err := versionResolver.ResolveLatestVersion(ref.Registry, ref.Repository)
 		if err != nil {
-			if ref.Version != "" {
-				_, pinnedErr := versionResolver.ResolveVersion(ref.Registry, ref.Repository, ref.Version)
-				if pinnedErr == nil {
-					results = append(results, CheckResult{
-						Name:     fmt.Sprintf("policy/%s", eid),
-						Status:   StatusPass,
-						Message:  fmt.Sprintf("%s (pinned — latest tag unavailable for staleness check)", cachedState.Version),
-						Blocking: false,
-					})
-					continue
-				}
+			result := resolvePinnedFallback(versionResolver, ref, eid, cachedState.Version, err)
+			if result.Status == StatusWarn {
+				unreachable[ref.Registry] = true
 			}
-			unreachable[ref.Registry] = true
-			results = append(results, CheckResult{
-				Name:     fmt.Sprintf("registry/%s", ref.Registry),
-				Status:   StatusWarn,
-				Message:  fmt.Sprintf("unreachable: %v", err),
-				Blocking: false,
-			})
+			results = append(results, result)
 			continue
 		}
 
@@ -295,6 +285,34 @@ func CheckPolicyVersions(cfg *complytime.WorkspaceConfig, cacheDir string, versi
 	}
 
 	return results
+}
+
+// resolvePinnedFallback attempts to resolve a pinned version when the latest
+// tag is unavailable. Returns a pass result if the pinned version resolves,
+// or a warn result marking the registry as unreachable.
+func resolvePinnedFallback(
+	resolver VersionResolver,
+	ref complytime.PolicyRef,
+	eid, cachedVersion string,
+	latestErr error,
+) CheckResult {
+	if ref.Version != "" {
+		_, pinnedErr := resolver.ResolveVersion(ref.Registry, ref.Repository, ref.Version)
+		if pinnedErr == nil {
+			return CheckResult{
+				Name:     fmt.Sprintf("policy/%s", eid),
+				Status:   StatusPass,
+				Message:  fmt.Sprintf("%s (pinned — latest tag unavailable for staleness check)", cachedVersion),
+				Blocking: false,
+			}
+		}
+	}
+	return CheckResult{
+		Name:     fmt.Sprintf("registry/%s", ref.Registry),
+		Status:   StatusWarn,
+		Message:  fmt.Sprintf("unreachable: %v", latestErr),
+		Blocking: false,
+	}
 }
 
 // CheckCache verifies the policy cache directory exists (R52).
