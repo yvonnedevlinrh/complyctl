@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/gemaraproj/go-gemara/bundle"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	ocistore "oras.land/oras-go/v2/content/oci"
@@ -130,6 +131,67 @@ func (m *MockPolicySource) CopyPolicy(ctx context.Context, policyID, tag string,
 	}
 
 	return manifestDesc, nil
+}
+
+// MockBundlePolicySource produces bundle-shaped OCI artifacts using
+// go-gemara bundle.Pack, matching what gemara-publish-oci publishes.
+type MockBundlePolicySource struct {
+	mu       sync.RWMutex
+	policies map[string]*mockPolicyData
+	files    map[string][]bundle.File // key: policyID
+}
+
+// NewMockBundlePolicySource creates a mock source that pushes bundle artifacts.
+func NewMockBundlePolicySource() *MockBundlePolicySource {
+	return &MockBundlePolicySource{
+		policies: make(map[string]*mockPolicyData),
+		files:    make(map[string][]bundle.File),
+	}
+}
+
+// SeedBundlePolicy registers a bundle-shape policy with the given files.
+func (m *MockBundlePolicySource) SeedBundlePolicy(policyID, version, digestStr string, files []bundle.File) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.policies[policyID] = &mockPolicyData{digest: digestStr, version: version}
+	m.files[policyID] = files
+}
+
+func (m *MockBundlePolicySource) DefinitionVersion(_ context.Context, lookupRef string) (string, string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	p, ok := m.policies[lookupRef]
+	if !ok {
+		return "", "", fmt.Errorf("policy %s not found", lookupRef)
+	}
+	return p.digest, p.version, nil
+}
+
+// CopyPolicy uses bundle.Pack to push a real bundle-shaped manifest into the
+// destination OCI store, matching the production publish pipeline.
+func (m *MockBundlePolicySource) CopyPolicy(ctx context.Context, policyID, tag string, dst *ocistore.Store) (ocispec.Descriptor, error) {
+	m.mu.RLock()
+	files, ok := m.files[policyID]
+	m.mu.RUnlock()
+	if !ok {
+		return ocispec.Descriptor{}, fmt.Errorf("bundle policy %s not found in mock", policyID)
+	}
+
+	b := &bundle.Bundle{
+		Manifest: bundle.Manifest{BundleVersion: "1", GemaraVersion: "v1.0.0"},
+		Files:    files,
+	}
+
+	desc, err := bundle.Pack(ctx, dst, b)
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("bundle pack: %w", err)
+	}
+
+	if err := dst.Tag(ctx, desc, tag); err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("failed to tag bundle manifest: %w", err)
+	}
+
+	return desc, nil
 }
 
 func isDuplicateErr(err error) bool {
