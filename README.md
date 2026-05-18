@@ -156,6 +156,16 @@ At least one of `[target]` or `--policy-id` is required.
 
 Output written to `./.complytime/scan/`.
 
+#### Exit codes
+
+| Exit Code | Meaning |
+|:---|:---|
+| `0` | Scan completed -- all targets evaluated (findings, if any, are in the report) |
+| non-zero | Operational error -- one or more targets could not be evaluated (partial results written before exit) |
+
+Policy violations (failed requirements) do **not** cause a non-zero exit.
+Operational errors (missing tools, clone failures, auth errors) do.
+
 ### `doctor`
 
 ```bash

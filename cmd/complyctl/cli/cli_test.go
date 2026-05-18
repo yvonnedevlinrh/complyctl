@@ -685,6 +685,122 @@ func TestFilterTargetsForPolicy(t *testing.T) {
 	assert.Equal(t, "t2", result[1].ID)
 }
 
+// --- checkOperationalErrors tests ---
+
+func TestCheckOperationalErrors_NoErrors(t *testing.T) {
+	assert.NoError(t, checkOperationalErrors(nil))
+	assert.NoError(t, checkOperationalErrors([]string{}))
+}
+
+func TestCheckOperationalErrors_SingleError(t *testing.T) {
+	err := checkOperationalErrors([]string{"target 'staging': clone failed"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "1 operational error —")
+	assert.NotContains(t, err.Error(), "1 operational errors")
+	assert.Contains(t, err.Error(), "some targets could not be evaluated")
+}
+
+func TestCheckOperationalErrors_MultipleErrors(t *testing.T) {
+	err := checkOperationalErrors([]string{
+		"target 'staging': clone failed",
+		"target 'dev': missing tool",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "2 operational errors")
+}
+
+// --- reportOperationalWarnings tests ---
+
+func TestReportOperationalWarnings_NoErrors(t *testing.T) {
+	oldStderr := os.Stderr
+	t.Cleanup(func() { os.Stderr = oldStderr })
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	reportOperationalWarnings(nil)
+
+	w.Close()
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+
+	assert.Empty(t, buf.String())
+}
+
+func TestReportOperationalWarnings_WithErrors(t *testing.T) {
+	oldStderr := os.Stderr
+	t.Cleanup(func() { os.Stderr = oldStderr })
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	reportOperationalWarnings([]string{"target 'staging': clone failed"})
+
+	w.Close()
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+
+	assert.Contains(t, buf.String(), "WARNING: 1 operational error during scan")
+	assert.Contains(t, buf.String(), "clone failed")
+}
+
+// --- processScanOutput tests ---
+
+func TestProcessScanOutput_NoErrors_ReturnsNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	scanOut := &scanOutput{
+		assessments: []provider.AssessmentLog{{
+			RequirementID: "req-1",
+			Steps:         []provider.Step{{Name: "check", Result: provider.ResultPassed}},
+		}},
+		assessmentTargets: []string{"target-1"},
+		errors:            nil,
+	}
+	policyTargets := []complytime.TargetConfig{{ID: "target-1"}}
+	reqToControl := map[string]string{"req-1": "ctrl-1"}
+
+	err = processScanOutput("", scanOut, "test-repo", reqToControl, policyTargets, "test-policy", []string{"target-1"})
+	assert.NoError(t, err)
+}
+
+func TestProcessScanOutput_WithErrors_ReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// Suppress warnings to stderr during test.
+	oldStderr := os.Stderr
+	t.Cleanup(func() { os.Stderr = oldStderr })
+	_, w, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	os.Stderr = w
+
+	scanOut := &scanOutput{
+		assessments: []provider.AssessmentLog{{
+			RequirementID: "req-1",
+			Steps:         []provider.Step{{Name: "check", Result: provider.ResultPassed}},
+		}},
+		assessmentTargets: []string{"target-1"},
+		errors:            []string{"target 'staging': clone failed"},
+	}
+	policyTargets := []complytime.TargetConfig{{ID: "target-1"}}
+	reqToControl := map[string]string{"req-1": "ctrl-1"}
+
+	err = processScanOutput("", scanOut, "test-repo", reqToControl, policyTargets, "test-policy", []string{"target-1"})
+	w.Close()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "1 operational error")
+}
+
 func TestExtractReqToControlMap_NilGraph(t *testing.T) {
 	m := extractReqToControlMap(nil)
 	assert.Empty(t, m)

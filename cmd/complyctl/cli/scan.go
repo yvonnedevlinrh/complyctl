@@ -353,17 +353,56 @@ func ensureGenerated(ctx context.Context, cacheDir string, mgr *provider.Manager
 	return runGeneration(ctx, mgr, groups, policyTargets, globalVars, repository, policyDigest, evaluatorIDs)
 }
 
+// runScanAndReport executes the scan across all targets and processes the
+// combined output (reports + error checking). It delegates post-scan handling
+// to processScanOutput.
 func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string) error {
 	reqToControl := extractReqToControlMap(graph)
-	allAssessments, assessmentTargets, err := executeScan(ctx, mgr, groups, policyTargets)
+	scanOut, err := executeScan(ctx, mgr, groups, policyTargets)
 	if err != nil {
 		return err
 	}
 
-	eval := buildEvaluator(repository, reqToControl, policyTargets, allAssessments, assessmentTargets)
+	return processScanOutput(format, scanOut, repository, reqToControl, policyTargets, eid, targetIDs)
+}
+
+// processScanOutput handles post-scan output: prints operational warnings to
+// stderr, writes evaluation reports, and returns an error when operational
+// failures are present (triggering non-zero exit). Reports are always written
+// before the error return so partial results remain available.
+func processScanOutput(format string, scanOut *scanOutput, repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, eid string, targetIDs []string) error {
+	reportOperationalWarnings(scanOut.errors)
+
+	eval := buildEvaluator(repository, reqToControl, policyTargets, scanOut.assessments, scanOut.assessmentTargets)
 
 	outDir := filepath.Join(".", complytime.WorkspaceDir, complytime.ScanOutputDir)
-	return writeScanReports(format, eval, outDir, ".", repository, allAssessments, assessmentTargets, reqToControl, eid, targetIDs)
+	if err := writeScanReports(format, eval, outDir, ".", repository, scanOut.assessments, scanOut.assessmentTargets, reqToControl, eid, targetIDs); err != nil {
+		return err
+	}
+
+	return checkOperationalErrors(scanOut.errors)
+}
+
+// reportOperationalWarnings prints provider-reported operational errors as
+// WARNING lines to stderr. No output is produced when errors is empty.
+func reportOperationalWarnings(errors []string) {
+	if warnings := output.FormatOperationalWarnings(errors); warnings != "" {
+		fmt.Fprint(os.Stderr, warnings)
+	}
+}
+
+// checkOperationalErrors returns an error summarizing the count of operational
+// failures. The returned error causes cobra to exit non-zero. Returns nil when
+// no operational errors occurred.
+func checkOperationalErrors(errors []string) error {
+	if len(errors) > 0 {
+		noun := "errors"
+		if len(errors) == 1 {
+			noun = "error"
+		}
+		return fmt.Errorf("scan completed with %d operational %s — some targets could not be evaluated", len(errors), noun)
+	}
+	return nil
 }
 
 func buildEvaluator(repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, allAssessments []provider.AssessmentLog, assessmentTargets []string) *output.Evaluator {
@@ -457,7 +496,7 @@ func generateForAllTargets(ctx context.Context, mgr *provider.Manager, groups ma
 	return nil
 }
 
-func executeScan(ctx context.Context, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig) ([]provider.AssessmentLog, []string, error) {
+func executeScan(ctx context.Context, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig) (*scanOutput, error) {
 	scanSpin := terminal.NewSpinner("Scanning targets...")
 	scanSpin.Start()
 	defer scanSpin.Stop()
@@ -465,39 +504,49 @@ func executeScan(ctx context.Context, mgr *provider.Manager, groups map[string]p
 	return scanAllTargets(ctx, mgr, groups, policyTargets)
 }
 
-func scanAllTargets(ctx context.Context, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig) ([]provider.AssessmentLog, []string, error) {
-	var allAssessments []provider.AssessmentLog
-	var assessmentTargets []string
+func scanAllTargets(ctx context.Context, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig) (*scanOutput, error) {
+	out := &scanOutput{}
 
 	for _, target := range policyTargets {
-		results, err := scanSingleTarget(ctx, mgr, groups, target)
+		results, opErrors, err := scanSingleTarget(ctx, mgr, groups, target)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		allAssessments = append(allAssessments, results...)
+		out.assessments = append(out.assessments, results...)
 		for range results {
-			assessmentTargets = append(assessmentTargets, target.ID)
+			out.assessmentTargets = append(out.assessmentTargets, target.ID)
 		}
+		out.errors = append(out.errors, opErrors...)
 	}
 
-	return allAssessments, assessmentTargets, nil
+	return out, nil
 }
 
-func scanSingleTarget(ctx context.Context, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, target complytime.TargetConfig) ([]provider.AssessmentLog, error) {
+// scanOutput holds the combined results of scanning all targets, separating
+// evaluation results (assessments) from operational failures (errors).
+type scanOutput struct {
+	assessments       []provider.AssessmentLog
+	assessmentTargets []string
+	errors            []string
+}
+
+func scanSingleTarget(ctx context.Context, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, target complytime.TargetConfig) ([]provider.AssessmentLog, []string, error) {
 	providerTargets := []provider.Target{{
 		TargetID:  target.ID,
 		Variables: target.Variables,
 	}}
 
 	var results []provider.AssessmentLog
+	var operationalErrors []string
 	for evalID := range groups {
-		evalResults, routeErr := mgr.RouteScan(ctx, evalID, providerTargets)
+		scanResult, routeErr := mgr.RouteScanResult(ctx, evalID, providerTargets)
 		if routeErr != nil {
-			return nil, routeErr
+			return nil, nil, routeErr
 		}
-		results = append(results, evalResults...)
+		results = append(results, scanResult.Assessments...)
+		operationalErrors = append(operationalErrors, scanResult.Errors...)
 	}
-	return results, nil
+	return results, operationalErrors, nil
 }
 
 func writeScanReports(format string, eval *output.Evaluator, outDir, reportDir, repository string, allAssessments []provider.AssessmentLog, assessmentTargets []string, reqToControl map[string]string, eid string, targetIDs []string) error {

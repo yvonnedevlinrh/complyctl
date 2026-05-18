@@ -53,8 +53,11 @@ type Target struct {
 }
 
 // ScanResponse carries assessment results from a provider scan.
+// Errors holds operational/infrastructure failures (coverage gaps).
+// Assessments holds actual evaluation results (compliance posture known).
 type ScanResponse struct {
 	Assessments []AssessmentLog
+	Errors      []string
 }
 
 // AssessmentLog holds the evaluation result for a single requirement.
@@ -219,7 +222,10 @@ func (c *Client) Scan(ctx context.Context, req *ScanRequest) (*ScanResponse, err
 		})
 	}
 
-	return &ScanResponse{Assessments: assessments}, nil
+	return &ScanResponse{
+		Assessments: assessments,
+		Errors:      protoResp.GetErrors(),
+	}, nil
 }
 
 func (c *Client) Export(ctx context.Context, req *ExportRequest) (*ExportResponse, error) {

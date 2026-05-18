@@ -137,3 +137,23 @@ func FormatScanSummary(assessments []provider.AssessmentLog, assessmentTargets [
 	fmt.Fprintln(&b, conclusion)
 	return b.String()
 }
+
+// FormatOperationalWarnings formats provider-reported operational errors
+// as a distinct warnings block for stderr. Returns empty string when there
+// are no errors.
+func FormatOperationalWarnings(errors []string) string {
+	if len(errors) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	noun := "errors"
+	if len(errors) == 1 {
+		noun = "error"
+	}
+	fmt.Fprintf(&b, "\nWARNING: %d operational %s during scan:\n", len(errors), noun)
+	for _, e := range errors {
+		fmt.Fprintf(&b, "  - %s\n", e)
+	}
+	fmt.Fprintln(&b)
+	return b.String()
+}

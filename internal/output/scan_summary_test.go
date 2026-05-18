@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complytime/complyctl/pkg/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/complytime/complyctl/pkg/provider"
 )
 
 func TestFormatScanSummary_SingleTarget(t *testing.T) {
@@ -122,6 +123,33 @@ func TestFormatScanSummary_MissingTargetID(t *testing.T) {
 
 	require.Contains(t, output, "1 requirements")
 	assert.Contains(t, output, "-")
+}
+
+func TestFormatOperationalWarnings_Empty(t *testing.T) {
+	result := FormatOperationalWarnings(nil)
+	assert.Empty(t, result)
+
+	result = FormatOperationalWarnings([]string{})
+	assert.Empty(t, result)
+}
+
+func TestFormatOperationalWarnings_SingleError(t *testing.T) {
+	result := FormatOperationalWarnings([]string{"target 'staging': clone failed: auth denied"})
+
+	assert.Contains(t, result, "WARNING: 1 operational error during scan")
+	assert.Contains(t, result, "clone failed: auth denied")
+}
+
+func TestFormatOperationalWarnings_MultipleErrors(t *testing.T) {
+	errors := []string{
+		"target 'staging': clone failed: auth denied",
+		"target 'dev': missing required tool: conftest",
+	}
+	result := FormatOperationalWarnings(errors)
+
+	assert.Contains(t, result, "WARNING: 2 operational errors during scan")
+	assert.Contains(t, result, "  - target 'staging': clone failed: auth denied")
+	assert.Contains(t, result, "  - target 'dev': missing required tool: conftest")
 }
 
 func TestFormatScanSummary_ControlIDMissing(t *testing.T) {

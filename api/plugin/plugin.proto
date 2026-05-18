@@ -89,10 +89,21 @@ message Target {
   map<string, string> variables = 2;
 }
 
-// ScanResponse contains assessment results for each requirement
+// ScanResponse contains assessment results for each requirement.
+// Providers MUST separate operational errors from evaluation results:
+//   - errors: pre-scan or infrastructure failures (missing tools, clone
+//     failures, config issues) where compliance posture is UNKNOWN
+//   - assessments: actual policy evaluation results where compliance
+//     posture is KNOWN (passed, failed, or evaluation error)
 message ScanResponse {
   // Assessment log entries (one per requirement evaluated)
   repeated AssessmentLog assessments = 1;
+
+  // Operational errors that prevented evaluation of one or more targets.
+  // These represent coverage gaps, not policy violations. Providers
+  // SHOULD continue scanning remaining targets and report partial
+  // results in assessments alongside errors for failed targets.
+  repeated string errors = 2;
 }
 
 // AssessmentLog contains results for a single requirement evaluation

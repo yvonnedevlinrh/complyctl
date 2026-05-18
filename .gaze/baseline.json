@@ -543,7 +543,7 @@
       "line": 236,
       "complexity": 5,
       "line_coverage": 23.80952380952381,
-      "crap": 16.05712126120289,
+      "crap": 16.057121261202894,
       "fix_strategy": "add_tests"
     },
     {

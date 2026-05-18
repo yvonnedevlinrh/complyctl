@@ -91,7 +91,10 @@ func (s *grpcServer) Scan(ctx context.Context, req *proto.ScanRequest) (*proto.S
 		})
 	}
 
-	return &proto.ScanResponse{Assessments: protoAssessments}, nil
+	return &proto.ScanResponse{
+		Assessments: protoAssessments,
+		Errors:      resp.Errors,
+	}, nil
 }
 
 func (s *grpcServer) Export(ctx context.Context, req *proto.ExportRequest) (*proto.ExportResponse, error) {
