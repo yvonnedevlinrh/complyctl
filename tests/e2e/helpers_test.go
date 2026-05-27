@@ -390,7 +390,7 @@ func installTestPlugin(t *testing.T, homeDir string) {
 	require.NoError(t, os.WriteFile(dstBinary, data, 0755))
 }
 
-// writeWorkspaceConfig creates a complytime.yaml in dir with the given registry URL.
+// writeWorkspaceConfig creates .complytime/complytime.yaml in dir with the given registry URL.
 func writeWorkspaceConfig(t *testing.T, dir, registryURL, policyID string) {
 	t.Helper()
 	yaml := fmt.Sprintf(`policies:
@@ -405,10 +405,12 @@ targets:
     variables:
       env: test
 `, registryURL, policyID, policyID, policyID)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "complytime.yaml"), []byte(yaml), 0644))
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "complytime.yaml"), []byte(yaml), 0644))
 }
 
-// writeWorkspaceConfigWithCollector creates a complytime.yaml with a collector section
+// writeWorkspaceConfigWithCollector creates .complytime/complytime.yaml with a collector section
 // for testing export functionality (COMPLYTIME_EXPORT_ENABLED).
 func writeWorkspaceConfigWithCollector(t *testing.T, dir, registryURL, policyID, collectorEndpoint string) {
 	t.Helper()
@@ -426,15 +428,19 @@ targets:
 collector:
   endpoint: "%s"
 `, registryURL, policyID, policyID, policyID, collectorEndpoint)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "complytime.yaml"), []byte(yaml), 0644))
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "complytime.yaml"), []byte(yaml), 0644))
 }
 
-// copyWorkspaceConfig copies complytime.yaml from src to dst directory.
+// copyWorkspaceConfig copies .complytime/complytime.yaml from src to dst directory.
 func copyWorkspaceConfig(t *testing.T, srcDir, dstDir string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(srcDir, "complytime.yaml"))
+	data, err := os.ReadFile(filepath.Join(srcDir, ".complytime", "complytime.yaml"))
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "complytime.yaml"), data, 0644))
+	dstConfigDir := filepath.Join(dstDir, ".complytime")
+	require.NoError(t, os.MkdirAll(dstConfigDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dstConfigDir, "complytime.yaml"), data, 0644))
 }
 
 // buildEnv creates an isolated environment with a custom HOME directory.

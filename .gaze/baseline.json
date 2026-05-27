@@ -74,7 +74,8 @@
       "line": 19,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -83,7 +84,8 @@
       "line": 44,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -92,7 +94,8 @@
       "line": 48,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -102,7 +105,8 @@
       "complexity": 4,
       "line_coverage": 0,
       "crap": 20,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -111,7 +115,8 @@
       "line": 72,
       "complexity": 11,
       "line_coverage": 92.10526315789474,
-      "crap": 11.059538562472664
+      "crap": 11.059538562472664,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -120,7 +125,8 @@
       "line": 29,
       "complexity": 4,
       "line_coverage": 53.84615384615385,
-      "crap": 5.5730541647701415
+      "crap": 5.5730541647701415,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -129,7 +135,8 @@
       "line": 60,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -138,7 +145,8 @@
       "line": 73,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -147,7 +155,8 @@
       "line": 95,
       "complexity": 4,
       "line_coverage": 29.41176470588235,
-      "crap": 9.627518827600243
+      "crap": 9.627518827600243,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -156,7 +165,8 @@
       "line": 123,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -165,7 +175,8 @@
       "line": 136,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -174,7 +185,8 @@
       "line": 154,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -183,7 +195,8 @@
       "line": 161,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -192,7 +205,8 @@
       "line": 25,
       "complexity": 3,
       "line_coverage": 44.44444444444444,
-      "crap": 4.54320987654321
+      "crap": 4.54320987654321,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -201,7 +215,8 @@
       "line": 50,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -210,7 +225,8 @@
       "line": 54,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -219,7 +235,8 @@
       "line": 63,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -228,7 +245,8 @@
       "line": 80,
       "complexity": 3,
       "line_coverage": 60,
-      "crap": 3.576
+      "crap": 3.576,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -237,7 +255,8 @@
       "line": 98,
       "complexity": 3,
       "line_coverage": 62.5,
-      "crap": 3.474609375
+      "crap": 3.474609375,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -246,7 +265,8 @@
       "line": 113,
       "complexity": 3,
       "line_coverage": 76.47058823529412,
-      "crap": 3.1172399755750053
+      "crap": 3.1172399755750053,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -255,7 +275,8 @@
       "line": 138,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -265,7 +286,8 @@
       "complexity": 6,
       "line_coverage": 30,
       "crap": 18.348,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -274,7 +296,8 @@
       "line": 19,
       "complexity": 1,
       "line_coverage": 75,
-      "crap": 1.015625
+      "crap": 1.015625,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -283,7 +306,8 @@
       "line": 40,
       "complexity": 7,
       "line_coverage": 47.82608695652174,
-      "crap": 13.959151804060163
+      "crap": 13.959151804060163,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -292,7 +316,8 @@
       "line": 106,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -302,7 +327,8 @@
       "complexity": 7,
       "line_coverage": 35.714285714285715,
       "crap": 20.01785714285714,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -312,7 +338,8 @@
       "complexity": 10,
       "line_coverage": 0,
       "crap": 110,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -321,7 +348,8 @@
       "line": 26,
       "complexity": 4,
       "line_coverage": 41.666666666666664,
-      "crap": 7.175925925925927
+      "crap": 7.175925925925927,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -330,7 +358,8 @@
       "line": 56,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -339,7 +368,8 @@
       "line": 60,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -348,7 +378,8 @@
       "line": 69,
       "complexity": 7,
       "line_coverage": 86.95652173913044,
-      "crap": 7.10873674693844
+      "crap": 7.10873674693844,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -357,7 +388,8 @@
       "line": 108,
       "complexity": 1,
       "line_coverage": 80,
-      "crap": 1.008
+      "crap": 1.008,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -366,7 +398,8 @@
       "line": 24,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 2
     },
     {
       "package": "cli",
@@ -375,7 +408,8 @@
       "line": 31,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 1.125
     },
     {
       "package": "cli",
@@ -384,7 +418,8 @@
       "line": 23,
       "complexity": 2,
       "line_coverage": 50,
-      "crap": 2.5
+      "crap": 2.5,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -393,7 +428,8 @@
       "line": 42,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -401,8 +437,9 @@
       "file": "cmd/complyctl/cli/providers.go",
       "line": 63,
       "complexity": 4,
-      "line_coverage": 53.333333333333336,
-      "crap": 5.626074074074074
+      "line_coverage": 57.142857142857146,
+      "crap": 5.259475218658891,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -411,7 +448,8 @@
       "line": 74,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -420,7 +458,8 @@
       "line": 87,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -429,7 +468,8 @@
       "line": 33,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 2
     },
     {
       "package": "cli",
@@ -438,7 +478,8 @@
       "line": 38,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 6
     },
     {
       "package": "cli",
@@ -447,7 +488,8 @@
       "line": 45,
       "complexity": 5,
       "line_coverage": 70.58823529411765,
-      "crap": 5.636067575819254
+      "crap": 5.636067575819254,
+      "gaze_crap": 5
     },
     {
       "package": "cli",
@@ -456,7 +498,8 @@
       "line": 70,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -465,7 +508,8 @@
       "line": 76,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -474,7 +518,8 @@
       "line": 80,
       "complexity": 2,
       "line_coverage": 50,
-      "crap": 2.5
+      "crap": 2.5,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -483,7 +528,8 @@
       "line": 86,
       "complexity": 2,
       "line_coverage": 92.3076923076923,
-      "crap": 2.0018206645425582
+      "crap": 2.0018206645425582,
+      "gaze_crap": 2
     },
     {
       "package": "cli",
@@ -492,7 +538,8 @@
       "line": 35,
       "complexity": 6,
       "line_coverage": 42.10526315789474,
-      "crap": 12.985857996792536
+      "crap": 12.985857996792536,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -501,7 +548,8 @@
       "line": 101,
       "complexity": 5,
       "line_coverage": 91.66666666666667,
-      "crap": 5.014467592592593
+      "crap": 5.014467592592593,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -510,7 +558,8 @@
       "line": 121,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -519,7 +568,8 @@
       "line": 133,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -528,7 +578,8 @@
       "line": 146,
       "complexity": 8,
       "line_coverage": 100,
-      "crap": 8
+      "crap": 8,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -537,7 +588,8 @@
       "line": 188,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -546,7 +598,8 @@
       "line": 207,
       "complexity": 9,
       "line_coverage": 100,
-      "crap": 9
+      "crap": 9,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -555,7 +608,8 @@
       "line": 237,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -565,7 +619,8 @@
       "complexity": 5,
       "line_coverage": 23.80952380952381,
       "crap": 16.057121261202894,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -574,7 +629,8 @@
       "line": 285,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -583,7 +639,8 @@
       "line": 292,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -592,7 +649,8 @@
       "line": 305,
       "complexity": 3,
       "line_coverage": 60,
-      "crap": 3.576
+      "crap": 3.576,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -602,7 +660,8 @@
       "complexity": 4,
       "line_coverage": 0,
       "crap": 20,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -611,7 +670,8 @@
       "line": 338,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -620,7 +680,8 @@
       "line": 346,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -629,7 +690,8 @@
       "line": 354,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -638,7 +700,8 @@
       "line": 368,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -647,7 +710,8 @@
       "line": 382,
       "complexity": 2,
       "line_coverage": 83.33333333333333,
-      "crap": 2.0185185185185186
+      "crap": 2.0185185185185186,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -656,7 +720,8 @@
       "line": 397,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -665,7 +730,8 @@
       "line": 406,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -674,7 +740,8 @@
       "line": 417,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -683,7 +750,8 @@
       "line": 434,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -692,7 +760,8 @@
       "line": 443,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -701,7 +770,8 @@
       "line": 453,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -710,7 +780,8 @@
       "line": 468,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -719,7 +790,8 @@
       "line": 485,
       "complexity": 6,
       "line_coverage": 100,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -728,7 +800,8 @@
       "line": 500,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -738,7 +811,8 @@
       "complexity": 4,
       "line_coverage": 0,
       "crap": 20,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -747,7 +821,8 @@
       "line": 527,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -757,7 +832,8 @@
       "complexity": 4,
       "line_coverage": 0,
       "crap": 20,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -766,7 +842,8 @@
       "line": 561,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -775,7 +852,8 @@
       "line": 580,
       "complexity": 3,
       "line_coverage": 75,
-      "crap": 3.140625
+      "crap": 3.140625,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -784,7 +862,8 @@
       "line": 595,
       "complexity": 4,
       "line_coverage": 40,
-      "crap": 7.4559999999999995
+      "crap": 7.4559999999999995,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -793,7 +872,8 @@
       "line": 607,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -802,7 +882,8 @@
       "line": 618,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -811,7 +892,8 @@
       "line": 627,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -821,7 +903,8 @@
       "complexity": 5,
       "line_coverage": 16.666666666666668,
       "crap": 19.467592592592588,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -830,7 +913,8 @@
       "line": 664,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -839,7 +923,8 @@
       "line": 668,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -849,7 +934,8 @@
       "complexity": 4,
       "line_coverage": 0,
       "crap": 20,
-      "fix_strategy": "add_tests"
+      "fix_strategy": "add_tests",
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -858,7 +944,8 @@
       "line": 690,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -867,7 +954,8 @@
       "line": 698,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -876,7 +964,8 @@
       "line": 715,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -885,7 +974,8 @@
       "line": 728,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -894,7 +984,8 @@
       "line": 748,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -903,7 +994,8 @@
       "line": 762,
       "complexity": 3,
       "line_coverage": 85.71428571428571,
-      "crap": 3.0262390670553936
+      "crap": 3.0262390670553936,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -912,7 +1004,8 @@
       "line": 775,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -921,7 +1014,8 @@
       "line": 797,
       "complexity": 7,
       "line_coverage": 100,
-      "crap": 7
+      "crap": 7,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -930,7 +1024,8 @@
       "line": 816,
       "complexity": 6,
       "line_coverage": 90,
-      "crap": 6.036
+      "crap": 6.036,
+      "gaze_crap": 0
     },
     {
       "package": "cli",
@@ -939,7 +1034,8 @@
       "line": 12,
       "complexity": 1,
       "line_coverage": 50,
-      "crap": 1.125
+      "crap": 1.125,
+      "gaze_crap": 0
     },
     {
       "package": "main",
@@ -1350,7 +1446,8 @@
       "line": 23,
       "complexity": 6,
       "line_coverage": 100,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1359,7 +1456,8 @@
       "line": 83,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1368,7 +1466,8 @@
       "line": 111,
       "complexity": 8,
       "line_coverage": 100,
-      "crap": 8
+      "crap": 8,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1377,7 +1476,8 @@
       "line": 141,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1386,7 +1486,8 @@
       "line": 154,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1395,7 +1496,8 @@
       "line": 164,
       "complexity": 5,
       "line_coverage": 63.63636363636363,
-      "crap": 6.202103681442525
+      "crap": 6.202103681442525,
+      "gaze_crap": 8.125
     },
     {
       "package": "complytime",
@@ -1404,7 +1506,8 @@
       "line": 194,
       "complexity": 4,
       "line_coverage": 100,
-      "crap": 4
+      "crap": 4,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1413,7 +1516,8 @@
       "line": 207,
       "complexity": 5,
       "line_coverage": 100,
-      "crap": 5
+      "crap": 5,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1422,7 +1526,8 @@
       "line": 229,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1431,7 +1536,8 @@
       "line": 246,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 3
     },
     {
       "package": "complytime",
@@ -1441,7 +1547,8 @@
       "complexity": 15,
       "line_coverage": 94.11764705882354,
       "crap": 15.045796865458986,
-      "fix_strategy": "decompose"
+      "fix_strategy": "decompose",
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1450,7 +1557,8 @@
       "line": 40,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1459,7 +1567,8 @@
       "line": 91,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1468,7 +1577,8 @@
       "line": 96,
       "complexity": 3,
       "line_coverage": 0,
-      "crap": 12
+      "crap": 12,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1477,7 +1587,8 @@
       "line": 108,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1486,7 +1597,8 @@
       "line": 117,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1495,7 +1607,8 @@
       "line": 25,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 12
     },
     {
       "package": "complytime",
@@ -1504,7 +1617,8 @@
       "line": 40,
       "complexity": 2,
       "line_coverage": 100,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 2.5
     },
     {
       "package": "complytime",
@@ -1513,7 +1627,8 @@
       "line": 51,
       "complexity": 2,
       "line_coverage": 0,
-      "crap": 6
+      "crap": 6,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1522,7 +1637,8 @@
       "line": 59,
       "complexity": 2,
       "line_coverage": 66.66666666666667,
-      "crap": 2.148148148148148
+      "crap": 2.148148148148148,
+      "gaze_crap": 2
     },
     {
       "package": "complytime",
@@ -1531,7 +1647,8 @@
       "line": 67,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 1
     },
     {
       "package": "complytime",
@@ -1540,7 +1657,8 @@
       "line": 72,
       "complexity": 1,
       "line_coverage": 0,
-      "crap": 2
+      "crap": 2,
+      "gaze_crap": 0
     },
     {
       "package": "complytime",
@@ -1549,7 +1667,8 @@
       "line": 77,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 1
     },
     {
       "package": "complytime",
@@ -1558,7 +1677,8 @@
       "line": 83,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 1
     },
     {
       "package": "complytime",
@@ -1567,7 +1687,8 @@
       "line": 88,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 1
     },
     {
       "package": "complytime",
@@ -1576,7 +1697,8 @@
       "line": 93,
       "complexity": 2,
       "line_coverage": 75,
-      "crap": 2.0625
+      "crap": 2.0625,
+      "gaze_crap": 6
     },
     {
       "package": "complytime",
@@ -1585,7 +1707,8 @@
       "line": 108,
       "complexity": 13,
       "line_coverage": 87.5,
-      "crap": 13.330078125
+      "crap": 13.330078125,
+      "gaze_crap": 13
     },
     {
       "package": "complytime",
@@ -1594,7 +1717,8 @@
       "line": 154,
       "complexity": 3,
       "line_coverage": 100,
-      "crap": 3
+      "crap": 3,
+      "gaze_crap": 3
     },
     {
       "package": "complytime",
@@ -1603,7 +1727,8 @@
       "line": 168,
       "complexity": 1,
       "line_coverage": 100,
-      "crap": 1
+      "crap": 1,
+      "gaze_crap": 0
     },
     {
       "package": "doctor",

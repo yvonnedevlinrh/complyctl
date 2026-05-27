@@ -213,7 +213,9 @@ targets:
     variables:
       env: test
 `, srv.URL, srv.URL)
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
+	configDir := filepath.Join(workDir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "complytime.yaml"), []byte(configYAML), 0644))
 
 	out := runComplytime(t, binary, workDir, env, "get")
 	t.Log(out)
@@ -294,7 +296,9 @@ targets:
     variables:
       env: staging
 `, srv.URL)
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
+	configDir := filepath.Join(workDir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "complytime.yaml"), []byte(configYAML), 0644))
 
 	runComplytime(t, binary, workDir, env, "get")
 
@@ -393,7 +397,9 @@ targets:
     variables:
       env: test
 `
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
+	configDir := filepath.Join(workDir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "complytime.yaml"), []byte(configYAML), 0644))
 
 	cmd := exec.Command(binary, "scan", "--policy-id", "nonexistent-policy")
 	cmd.Dir = workDir
@@ -711,7 +717,9 @@ targets:
     variables:
       env: test
 `, srv.URL, srv.URL)
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "complytime.yaml"), []byte(configYAML), 0644))
+	configDir := filepath.Join(workDir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "complytime.yaml"), []byte(configYAML), 0644))
 
 	runComplytime(t, binary, workDir, env, "get")
 

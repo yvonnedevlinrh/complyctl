@@ -276,8 +276,9 @@ EOF
 echo ""
 echo "=== workspace flag ==="
 test_workspace_flag() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     create_test_workspace_config "${workspace_dir}"
 
@@ -297,8 +298,9 @@ test_workspace_flag
 echo ""
 echo "=== workspace env var ==="
 test_workspace_env_var() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     create_test_workspace_config "${workspace_dir}"
 
@@ -318,9 +320,11 @@ test_workspace_env_var
 echo ""
 echo "=== workspace flag precedence ==="
 test_workspace_precedence() {
-    local flag_workspace=$(mktemp -d)
-    local env_workspace=$(mktemp -d)
-    trap "rm -rf '${flag_workspace}' '${env_workspace}'" RETURN
+    local flag_workspace
+    flag_workspace=$(mktemp -d)
+    local env_workspace
+    env_workspace=$(mktemp -d)
+    trap 'rm -rf "$flag_workspace" "$env_workspace"' RETURN
 
     create_test_workspace_config "${flag_workspace}"
     create_test_workspace_config "${env_workspace}" "invalid-target"
@@ -341,8 +345,9 @@ test_workspace_precedence
 echo ""
 echo "=== legacy config warning ==="
 test_legacy_config_warning() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     cat > "${workspace_dir}/complytime.yaml" <<EOF
 policies:
@@ -370,8 +375,9 @@ test_legacy_config_warning
 echo ""
 echo "=== new location preferred ==="
 test_new_location_preferred() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     # Create both locations
     create_test_workspace_config "${workspace_dir}"
@@ -418,14 +424,16 @@ test_invalid_workspace_path
 echo ""
 echo "=== relative workspace path ==="
 test_relative_workspace_path() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     create_test_workspace_config "${workspace_dir}"
 
     # cd to parent directory and use relative path
     cd "$(dirname "${workspace_dir}")"
-    local rel_path="./$(basename "${workspace_dir}")"
+    local rel_path
+    rel_path="./$(basename "${workspace_dir}")"
 
     local output exit_code
     output=$("${BINARY}" list --workspace "${rel_path}" 2>&1)
@@ -448,13 +456,13 @@ test_tilde_expansion() {
     # Create test workspace in home directory
     local test_subdir="complytime-tilde-test-$$"
     local workspace_dir="${HOME}/${test_subdir}"
-    trap "rm -rf '${workspace_dir}'" RETURN
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     create_test_workspace_config "${workspace_dir}"
 
     # Use tilde path
     local output exit_code
-    output=$("${BINARY}" list --workspace "~/${test_subdir}" 2>&1)
+    output=$("${BINARY}" list --workspace ~/"${test_subdir}" 2>&1)
     exit_code=$?
 
     if [ $exit_code -eq 0 ]; then
@@ -469,8 +477,9 @@ test_tilde_expansion
 echo ""
 echo "=== scan output directory ==="
 test_scan_output_directory() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     create_test_workspace_config "${workspace_dir}"
 
@@ -498,8 +507,9 @@ test_scan_output_directory
 echo ""
 echo "=== log file directory ==="
 test_log_file_directory() {
-    local workspace_dir=$(mktemp -d)
-    trap "rm -rf '${workspace_dir}'" RETURN
+    local workspace_dir
+    workspace_dir=$(mktemp -d)
+    trap 'rm -rf "$workspace_dir"' RETURN
 
     mkdir -p "${workspace_dir}/.complytime"
 
