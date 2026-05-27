@@ -76,6 +76,9 @@ const (
 
 const OCIEmptyConfig = "application/vnd.oci.empty.v1+json"
 
+// WorkspaceEnvVar is the environment variable name for workspace directory resolution.
+const WorkspaceEnvVar = "COMPLYTIME_WORKSPACE"
+
 // Scan result status emoji indicators for terminal summary table (FR-037).
 const (
 	StatusPassed  = "✅"

@@ -38,7 +38,11 @@ func initCmd(common *Common) *cobra.Command {
 // Errors if complytime.yaml already exists (like go mod init).
 // User runs `complyctl get` and `complyctl doctor` separately.
 func (o *initOptions) run() error {
-	workspace := complytime.NewWorkspace()
+	baseDir, err := o.ResolveWorkspace()
+	if err != nil {
+		return err
+	}
+	workspace := complytime.NewWorkspace(baseDir)
 
 	if workspace.Exists() {
 		return fmt.Errorf("%s already exists", workspace.Path())

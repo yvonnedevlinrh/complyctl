@@ -103,7 +103,11 @@ func completeTargetIDs(_ *cobra.Command, args []string, _ string) ([]string, cob
 	if len(args) > 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	cfg, err := loadWorkspaceConfig()
+	baseDir, err := complytime.ResolveWorkspaceDir("")
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	cfg, err := loadWorkspaceConfig(baseDir)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -143,7 +147,12 @@ func (o *scanOptions) run(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	cfg, err := loadWorkspaceConfig()
+	baseDir, err := o.ResolveWorkspace()
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadWorkspaceConfig(baseDir)
 	if err != nil {
 		return err
 	}
@@ -171,7 +180,7 @@ func (o *scanOptions) run(ctx context.Context) error {
 		return fmt.Errorf("policy %q not found in config — run complyctl list to see available policy IDs", policyID)
 	}
 
-	return o.scanPolicy(ctx, cfg, *entry, o.target)
+	return o.scanPolicy(ctx, cfg, *entry, o.target, baseDir)
 }
 
 // resolveTarget finds a target by ID in the config's target list.
@@ -225,15 +234,15 @@ func resolvePolicy(target *complytime.TargetConfig, policyID string) (string, er
 	return policyID, nil
 }
 
-func loadWorkspaceConfig() (*complytime.WorkspaceConfig, error) {
-	ws := complytime.NewWorkspace()
+func loadWorkspaceConfig(baseDir string) (*complytime.WorkspaceConfig, error) {
+	ws := complytime.NewWorkspace(baseDir)
 	if err := ws.LoadAndValidate(); err != nil {
 		return nil, fmt.Errorf("failed to load workspace config: %w", err)
 	}
 	return ws.Config(), nil
 }
 
-func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceConfig, entry complytime.PolicyEntry, targetID string) error {
+func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceConfig, entry complytime.PolicyEntry, targetID, baseDir string) error {
 	ref := complytime.ParsePolicyRef(entry.URL)
 	eid := entry.EffectiveID()
 
@@ -258,7 +267,7 @@ func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceC
 	// Generation runs for ALL targets referencing the policy (per D7:
 	// generation freshness is policy-scoped, not target-scoped). Narrowing
 	// before generation would silently skip targets that were never generated.
-	if err := ensureGenerated(ctx, o.cacheDir, mgr, groups, policyTargets, cfg.Variables, ref.Repository, eid, evaluatorIDs); err != nil {
+	if err := ensureGenerated(ctx, o.cacheDir, baseDir, mgr, groups, policyTargets, cfg.Variables, ref.Repository, eid, evaluatorIDs); err != nil {
 		return err
 	}
 
@@ -270,11 +279,11 @@ func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceC
 	targetIDs := targetIDList(policyTargets)
 	fmt.Println(output.FormatPreScanSummary(len(assessmentConfigs), evaluatorIDs, targetIDs))
 
-	return o.executeScanPhase(ctx, cfg, mgr, groups, policyTargets, ref.Repository, eid, graph, targetIDs)
+	return o.executeScanPhase(ctx, cfg, mgr, groups, policyTargets, ref.Repository, eid, graph, targetIDs, baseDir)
 }
 
-func (o *scanOptions) executeScanPhase(ctx context.Context, cfg *complytime.WorkspaceConfig, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string) error {
-	if err := runScanAndReport(ctx, o.format, mgr, groups, policyTargets, repository, eid, graph, targetIDs); err != nil {
+func (o *scanOptions) executeScanPhase(ctx context.Context, cfg *complytime.WorkspaceConfig, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string, baseDir string) error {
+	if err := runScanAndReport(ctx, o.format, mgr, groups, policyTargets, repository, eid, graph, targetIDs, baseDir); err != nil {
 		return err
 	}
 	return o.maybeExport(ctx, cfg, mgr, groups)
@@ -342,21 +351,21 @@ func targetIDList(targets []complytime.TargetConfig) []string {
 	return ids
 }
 
-func ensureGenerated(ctx context.Context, cacheDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, eid string, evaluatorIDs []string) error {
-	needsGenerate, policyDigest, err := checkGenerationFreshness(cacheDir, repository, eid)
+func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, eid string, evaluatorIDs []string) error {
+	needsGenerate, policyDigest, err := checkGenerationFreshness(cacheDir, baseDir, repository, eid)
 	if err != nil {
 		return err
 	}
 	if !needsGenerate {
 		return nil
 	}
-	return runGeneration(ctx, cacheDir, mgr, groups, policyTargets, globalVars, repository, policyDigest, evaluatorIDs)
+	return runGeneration(ctx, cacheDir, baseDir, mgr, groups, policyTargets, globalVars, repository, policyDigest, evaluatorIDs)
 }
 
 // runScanAndReport executes the scan across all targets and processes the
 // combined output (reports + error checking). It delegates post-scan handling
 // to processScanOutput.
-func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string) error {
+func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string, baseDir string) error {
 	reqToControl := extractReqToControlMap(graph)
 	planToReq := extractPlanToReqMap(graph)
 	scanOut, err := executeScan(ctx, mgr, groups, policyTargets)
@@ -365,20 +374,20 @@ func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager,
 	}
 
 	resolveAssessmentIDs(scanOut.assessments, planToReq)
-	return processScanOutput(format, scanOut, repository, reqToControl, policyTargets, eid, targetIDs)
+	return processScanOutput(format, scanOut, repository, reqToControl, policyTargets, eid, targetIDs, baseDir)
 }
 
 // processScanOutput handles post-scan output: prints operational warnings to
 // stderr, writes evaluation reports, and returns an error when operational
 // failures are present (triggering non-zero exit). Reports are always written
 // before the error return so partial results remain available.
-func processScanOutput(format string, scanOut *scanOutput, repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, eid string, targetIDs []string) error {
+func processScanOutput(format string, scanOut *scanOutput, repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, eid string, targetIDs []string, baseDir string) error {
 	reportOperationalWarnings(scanOut.errors)
 
 	eval := buildEvaluator(repository, reqToControl, policyTargets, scanOut.assessments, scanOut.assessmentTargets)
 
-	outDir := filepath.Join(".", complytime.WorkspaceDir, complytime.ScanOutputDir)
-	if err := writeScanReports(format, eval, outDir, ".", repository, scanOut.assessments, scanOut.assessmentTargets, reqToControl, eid, targetIDs); err != nil {
+	outDir := filepath.Join(baseDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
+	if err := writeScanReports(format, eval, outDir, baseDir, repository, scanOut.assessments, scanOut.assessmentTargets, reqToControl, eid, targetIDs); err != nil {
 		return err
 	}
 
@@ -443,22 +452,22 @@ func filterTargetsForPolicy(targets []complytime.TargetConfig, policyID string) 
 	return result
 }
 
-func checkGenerationFreshness(cacheDir, repository, eid string) (needsGenerate bool, digest string, err error) {
+func checkGenerationFreshness(cacheDir, baseDir, repository, eid string) (needsGenerate bool, digest string, err error) {
 	cacheState, err := cache.LoadState(cacheDir)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to load cache state: %w", err)
 	}
 	policyState, _ := cacheState.GetPolicyState(repository)
 
-	genState, err := policy.LoadGenerationState(".", repository)
+	genState, err := policy.LoadGenerationState(baseDir, repository)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to load generation state: %w", err)
 	}
 
-	return needsRegeneration(genState, policyState.Digest, eid), policyState.Digest, nil
+	return needsRegeneration(baseDir, genState, policyState.Digest, eid), policyState.Digest, nil
 }
 
-func needsRegeneration(genState *policy.GenerationState, digest, eid string) bool {
+func needsRegeneration(baseDir string, genState *policy.GenerationState, digest, eid string) bool {
 	if genState == nil {
 		fmt.Fprintf(os.Stderr, "No prior generation found — generating artifacts for %s\n", eid)
 		return true
@@ -467,7 +476,7 @@ func needsRegeneration(genState *policy.GenerationState, digest, eid string) boo
 		fmt.Fprintf(os.Stderr, "Policy %s updated since last generate — regenerating\n", eid)
 		return true
 	}
-	if !evaluatorArtifactsExist(genState.EvaluatorIDs) {
+	if !evaluatorArtifactsExist(baseDir, genState.EvaluatorIDs) {
 		fmt.Fprintf(os.Stderr, "Generated artifacts missing on disk for %s — regenerating\n", eid)
 		return true
 	}
@@ -475,9 +484,9 @@ func needsRegeneration(genState *policy.GenerationState, digest, eid string) boo
 	return false
 }
 
-func evaluatorArtifactsExist(evaluatorIDs []string) bool {
+func evaluatorArtifactsExist(baseDir string, evaluatorIDs []string) bool {
 	for _, evalID := range evaluatorIDs {
-		evalDir := filepath.Join(".", complytime.WorkspaceDir, evalID)
+		evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, evalID)
 		info, err := os.Stat(evalDir)
 		if err != nil || !info.IsDir() {
 			return false
@@ -490,7 +499,7 @@ func evaluatorArtifactsExist(evaluatorIDs []string) bool {
 	return true
 }
 
-func runGeneration(ctx context.Context, cacheDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, policyDigest string, evaluatorIDs []string) error {
+func runGeneration(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, policyDigest string, evaluatorIDs []string) error {
 	genSpin := terminal.NewSpinner("Generating policy artifacts...")
 	genSpin.Start()
 	defer genSpin.Stop()
@@ -500,7 +509,7 @@ func runGeneration(ctx context.Context, cacheDir string, mgr *provider.Manager, 
 	}
 
 	newGenState := policy.NewGenerationState(repository, policyDigest, evaluatorIDs)
-	if err := policy.SaveGenerationState(".", repository, newGenState); err != nil {
+	if err := policy.SaveGenerationState(baseDir, repository, newGenState); err != nil {
 		return fmt.Errorf("failed to save generation state: %w", err)
 	}
 	return nil

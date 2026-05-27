@@ -32,7 +32,8 @@ dist
 # testing complytime created by openscap-plugin
 user_workspace
 complyctl.log
-.complytime
+.complytime/**
+!.complytime/complytime.yaml
 
 # Outputs
 assessment-plan.json

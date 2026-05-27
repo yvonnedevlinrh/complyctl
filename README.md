@@ -38,12 +38,11 @@ A lightweight compliance runtime that pulls [Gemara](https://gemara.openssf.org/
 │                                           │ Generate, Scan │     │
 │  ┌──────────────┐                         └────────────────┘     │
 │  │  Workspace   │                                                │
-│  │              │  complytime.yaml defines:                      │
-│  │ ./complytime │   - registry URL                               │
-│  │   .yaml      │   - policy IDs + versions                      │
-│  │              │   - targets + variables                        │
-│  │ ./.comply-   │                                                │
-│  │   time/scan/ │                                                │
+│  │              │  .complytime/complytime.yaml defines:           │
+│  │ .complytime/ │   - registry URL                               │
+│  │  complytime  │   - policy IDs + versions                      │
+│  │   .yaml      │   - targets + variables                        │
+│  │  scan/       │                                                │
 │  │  (output)    │  Scan output (EvaluationLog, OSCAL,            │
 │  └──────────────┘   SARIF, Markdown) written to workspace        │
 └──────────────────────────────────────────────────────────────────┘
@@ -54,7 +53,7 @@ A lightweight compliance runtime that pulls [Gemara](https://gemara.openssf.org/
 | Component | Description |
 |:---|:---|
 | **OCI Registry** | Remote store for Gemara policies. Supports two OCI manifest layouts: split-layer (distinct media types per artifact) and Gemara bundle format (single artifact media type with annotation-based differentiation). Both formats are auto-detected and resolved transparently. |
-| **Workspace** | Current directory containing `complytime.yaml`. Defines which registry, policies, and targets to use. Scan output lands in `./.complytime/scan/`. |
+| **Workspace** | Resolved workspace directory containing `.complytime/complytime.yaml` (or legacy `complytime.yaml` at root). Configurable via `--workspace` flag or `COMPLYTIME_WORKSPACE` env var. Defines which registry, policies, and targets to use. Scan output lands in `.complytime/scan/`. |
 | **Cache** | Local OCI Layout stores under `~/.complytime/policies/`. One store per policy ID. `state.json` tracks digests for incremental sync. |
 | **Providers** | Standalone executables in `~/.complytime/providers/` matching the `complyctl-provider-*` naming convention. Communicate via gRPC (`Describe`, `Generate`, `Scan`). Evaluator ID derived from filename. |
 | **CLI** | Orchestrates the workflow: fetch policies, resolve dependency graphs, dispatch to providers, produce compliance reports. |
@@ -80,7 +79,41 @@ A lightweight compliance runtime that pulls [Gemara](https://gemara.openssf.org/
 | `providers` | List discovered scanning providers and their health status |
 | `version` | Print version |
 
-Global flag: `--debug` / `-d` — output debug logs.
+Global flags: 
+- `--debug` / `-d` — output debug logs
+- `--workspace` / `-w` — workspace directory (project root containing `.complytime/`, defaults to current directory)
+
+### Run Commands from Any Directory
+
+Use the `--workspace` flag to run commands from any directory:
+
+```bash
+# Run from a different directory
+complyctl scan --workspace ~/projects/myapp
+
+# Using relative path
+complyctl scan --workspace ../myapp
+
+# Using environment variable
+export COMPLYTIME_WORKSPACE=~/projects/myapp
+complyctl scan
+```
+
+### Config File Location
+
+complyctl organizes all workspace-specific files under `.complytime/` to keep your repository root clean and avoid configuration conflicts.
+
+- `.complytime/complytime.yaml` - Configuration file (policies, targets, variables)
+- `.complytime/scan/` - Scan output reports
+- `.complytime/complyctl.log` - Debug log file
+- `.complytime/generation/` - Generation state (per-policy freshness tracking)
+
+**Note:** For backward compatibility, complyctl still supports `complytime.yaml` at the repository root, but this location is deprecated. Move your config to `.complytime/complytime.yaml`:
+
+```bash
+mkdir -p .complytime
+mv complytime.yaml .complytime/complytime.yaml
+```
 
 ### `init`
 
@@ -88,7 +121,7 @@ Global flag: `--debug` / `-d` — output debug logs.
 complyctl init
 ```
 
-Creates a workspace configuration file (`complytime.yaml`). When one already exists, validates and runs `get` automatically.
+Creates a workspace configuration file (`.complytime/complytime.yaml`). Errors if one already exists.
 
 ### `get`
 
@@ -187,7 +220,7 @@ Lists discovered scanning providers with their evaluator ID, path, health status
 ## Workspace Configuration
 
 ```yaml
-# complytime.yaml
+# .complytime/complytime.yaml
 policies:
   - url: registry.example.com/policies/nist-800-53-r5@v1.0.0
     id: nist

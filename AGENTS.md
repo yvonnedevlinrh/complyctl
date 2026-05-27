@@ -285,6 +285,7 @@ packages organized by domain responsibility.
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- workspace-configuration: `--workspace` flag and `COMPLYTIME_WORKSPACE` env var for workspace directory resolution; config file moved to `.complytime/complytime.yaml` with legacy fallback; `NewWorkspace(baseDir string)` signature change; all output paths relative to resolved workspace
 - fix-resolve-plan-ids: `complyctl scan` resolves assessment plan IDs to requirement and control IDs in scan reports via `extractPlanToReqMap()`/`resolveAssessmentIDs()` in `cmd/complyctl/cli/scan.go`
 - complypack-pull: `complyctl get` fetches complypack OCI artifacts when `complypacks:` configured in `complytime.yaml`; `complyctl providers` gains COMPLYPACK column; `complyctl doctor` gains complypack cache check; `GenerateRequest.complypack_content_path` proto field added; `internal/cache/complypack*.go` cache/sync/source modules; `internal/cache/state.go` extended with complypack state tracking
 - scan-target-arg: `complyctl scan [target]` positional argument for scoping scans to a single target with automatic policy-id inference

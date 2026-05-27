@@ -17,7 +17,6 @@ import (
 )
 
 func doctorCmd(common *Common) *cobra.Command {
-	_ = common
 	var verbose bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -31,7 +30,11 @@ and reports missing entries.`,
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runDoctor(verbose)
+			baseDir, err := common.ResolveWorkspace()
+			if err != nil {
+				return err
+			}
+			return runDoctor(baseDir, verbose)
 		},
 	}
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "expand per-provider variable detail")
@@ -72,7 +75,7 @@ func (r *registryVersionResolver) resolve(registryURL, repository, version strin
 }
 
 // See FR-039, R44, R51, R52, R55: specs/001-gemara-native-workflow/spec.md
-func runDoctor(verbose bool) error {
+func runDoctor(baseDir string, verbose bool) error {
 	providerDir, err := complytime.ResolveProviderDir()
 	if err != nil {
 		return fmt.Errorf("failed to resolve provider directory: %w", err)
@@ -83,12 +86,12 @@ func runDoctor(verbose bool) error {
 		return fmt.Errorf("failed to resolve cache directory: %w", err)
 	}
 
-	configPath := complytime.WorkspaceConfigFile
+	ws := complytime.NewWorkspace(baseDir)
+	configPath := ws.Path()
 	var cfg *complytime.WorkspaceConfig
 
-	loaded, loadErr := complytime.LoadFrom(configPath)
-	if loadErr == nil {
-		cfg = loaded
+	if loadErr := ws.Load(); loadErr == nil {
+		cfg = ws.Config()
 	}
 
 	var resolver doctor.PolicyGraphResolver

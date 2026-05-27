@@ -67,7 +67,11 @@ func (o *listOptions) complete() error {
 }
 
 func (o *listOptions) run(_ context.Context) error {
-	ws := complytime.NewWorkspace()
+	baseDir, err := o.ResolveWorkspace()
+	if err != nil {
+		return err
+	}
+	ws := complytime.NewWorkspace(baseDir)
 	if err := ws.LoadAndValidate(); err != nil {
 		return fmt.Errorf("failed to load workspace config: %w", err)
 	}

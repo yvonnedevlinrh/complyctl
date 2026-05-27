@@ -254,6 +254,276 @@ else
     fail "scan default: formatted output found without --format"
 fi
 
+# --- Workspace Configuration Test Helpers ---
+
+# Helper function to create standard test workspace config
+create_test_workspace_config() {
+    local workspace_dir="$1"
+    local target_id="${2:-test-target}"
+
+    mkdir -p "${workspace_dir}/.complytime"
+    cat > "${workspace_dir}/.complytime/complytime.yaml" <<EOF
+policies:
+  - url: ${REGISTRY_URL}/${POLICY_ID}
+    id: ${POLICY_ID}
+targets:
+  - id: ${target_id}
+    policies:
+      - ${POLICY_ID}
+EOF
+}
+
+echo ""
+echo "=== workspace flag ==="
+test_workspace_flag() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    create_test_workspace_config "${workspace_dir}"
+
+    local output
+    output=$("${BINARY}" list --workspace "${workspace_dir}" 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        pass "workspace flag test"
+    else
+        fail "workspace flag test: exit code ${exit_code}"
+        echo "${output}" >&2
+    fi
+}
+test_workspace_flag
+
+echo ""
+echo "=== workspace env var ==="
+test_workspace_env_var() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    create_test_workspace_config "${workspace_dir}"
+
+    local output
+    output=$(COMPLYTIME_WORKSPACE="${workspace_dir}" "${BINARY}" list 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        pass "workspace env var test"
+    else
+        fail "workspace env var test: exit code ${exit_code}"
+        echo "${output}" >&2
+    fi
+}
+test_workspace_env_var
+
+echo ""
+echo "=== workspace flag precedence ==="
+test_workspace_precedence() {
+    local flag_workspace=$(mktemp -d)
+    local env_workspace=$(mktemp -d)
+    trap "rm -rf '${flag_workspace}' '${env_workspace}'" RETURN
+
+    create_test_workspace_config "${flag_workspace}"
+    create_test_workspace_config "${env_workspace}" "invalid-target"
+
+    local output
+    output=$(COMPLYTIME_WORKSPACE="${env_workspace}" "${BINARY}" list --workspace "${flag_workspace}" 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        pass "workspace precedence test"
+    else
+        fail "workspace precedence test: exit code ${exit_code}"
+        echo "${output}" >&2
+    fi
+}
+test_workspace_precedence
+
+echo ""
+echo "=== legacy config warning ==="
+test_legacy_config_warning() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    cat > "${workspace_dir}/complytime.yaml" <<EOF
+policies:
+  - url: ${REGISTRY_URL}/${POLICY_ID}
+    id: ${POLICY_ID}
+targets:
+  - id: test-target
+    policies:
+      - ${POLICY_ID}
+EOF
+
+    local output
+    output=$(COMPLYTIME_WORKSPACE="${workspace_dir}" "${BINARY}" list 2>&1)
+    local exit_code=$?
+
+    if echo "${output}" | grep -q "WARNING.*legacy location"; then
+        pass "legacy config warning test"
+    else
+        fail "legacy config warning test: expected deprecation warning"
+        echo "${output}" >&2
+    fi
+}
+test_legacy_config_warning
+
+echo ""
+echo "=== new location preferred ==="
+test_new_location_preferred() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    # Create both locations
+    create_test_workspace_config "${workspace_dir}"
+
+    cat > "${workspace_dir}/complytime.yaml" <<EOF
+policies:
+  - url: ${REGISTRY_URL}/${POLICY_ID}
+    id: ${POLICY_ID}
+targets:
+  - id: legacy-target
+    policies:
+      - ${POLICY_ID}
+EOF
+
+    local output
+    output=$(COMPLYTIME_WORKSPACE="${workspace_dir}" "${BINARY}" list 2>&1)
+    local exit_code=$?
+
+    # Should NOT show warning when new location exists
+    if [ $exit_code -eq 0 ] && ! echo "${output}" | grep -q "WARNING"; then
+        pass "new location preferred test"
+    else
+        fail "new location preferred test: should not show warning"
+        echo "${output}" >&2
+    fi
+}
+test_new_location_preferred
+
+echo ""
+echo "=== invalid workspace path ==="
+test_invalid_workspace_path() {
+    local output exit_code
+    output=$("${BINARY}" list --workspace /nonexistent/path/that/does/not/exist 2>&1) || exit_code=$?
+
+    if [ "${exit_code:-0}" -ne 0 ] && echo "${output}" | grep -q "workspace directory does not exist"; then
+        pass "invalid workspace path test"
+    else
+        fail "invalid workspace path test: expected error for nonexistent path"
+        echo "exit_code=${exit_code:-0}, output=${output}" >&2
+    fi
+}
+test_invalid_workspace_path
+
+echo ""
+echo "=== relative workspace path ==="
+test_relative_workspace_path() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    create_test_workspace_config "${workspace_dir}"
+
+    # cd to parent directory and use relative path
+    cd "$(dirname "${workspace_dir}")"
+    local rel_path="./$(basename "${workspace_dir}")"
+
+    local output exit_code
+    output=$("${BINARY}" list --workspace "${rel_path}" 2>&1)
+    exit_code=$?
+
+    cd - > /dev/null
+
+    if [ $exit_code -eq 0 ]; then
+        pass "relative workspace path test"
+    else
+        fail "relative workspace path test: exit code ${exit_code}"
+        echo "${output}" >&2
+    fi
+}
+test_relative_workspace_path
+
+echo ""
+echo "=== tilde expansion ==="
+test_tilde_expansion() {
+    # Create test workspace in home directory
+    local test_subdir="complytime-tilde-test-$$"
+    local workspace_dir="${HOME}/${test_subdir}"
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    create_test_workspace_config "${workspace_dir}"
+
+    # Use tilde path
+    local output exit_code
+    output=$("${BINARY}" list --workspace "~/${test_subdir}" 2>&1)
+    exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        pass "tilde expansion test"
+    else
+        fail "tilde expansion test: exit code ${exit_code}"
+        echo "${output}" >&2
+    fi
+}
+test_tilde_expansion
+
+echo ""
+echo "=== scan output directory ==="
+test_scan_output_directory() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    create_test_workspace_config "${workspace_dir}"
+
+    # Run scan and verify output directory
+    local output exit_code
+    output=$("${BINARY}" scan --policy-id "${POLICY_ID}" --workspace "${workspace_dir}" 2>&1)
+    exit_code=$?
+
+    # Check if scan output was created in correct location
+    if [ $exit_code -eq 0 ] && [ -d "${workspace_dir}/.complytime/scan" ]; then
+        # Verify evaluation-log was created in scan directory
+        if ls "${workspace_dir}/.complytime/scan/evaluation-log-"*.yaml >/dev/null 2>&1; then
+            pass "scan output directory test"
+        else
+            fail "scan output directory test: no evaluation-log in .complytime/scan/"
+            echo "${output}" >&2
+        fi
+    else
+        fail "scan output directory test: scan failed or directory not created"
+        echo "exit_code=${exit_code}, output=${output}" >&2
+    fi
+}
+test_scan_output_directory
+
+echo ""
+echo "=== log file directory ==="
+test_log_file_directory() {
+    local workspace_dir=$(mktemp -d)
+    trap "rm -rf '${workspace_dir}'" RETURN
+
+    mkdir -p "${workspace_dir}/.complytime"
+
+    # Create invalid config to trigger an error (which will be logged)
+    cat > "${workspace_dir}/.complytime/complytime.yaml" <<EOF
+policies: []
+EOF
+
+    # Run list command with invalid config (will fail and log error)
+    local output
+    output=$("${BINARY}" list --workspace "${workspace_dir}" --debug 2>&1) || true
+
+    # Check if log file was created in correct location
+    # The lazy log writer creates the file when an error is logged
+    if [ -f "${workspace_dir}/.complytime/complyctl.log" ]; then
+        pass "log file directory test"
+    else
+        fail "log file directory test: log file not created in .complytime/"
+        echo "output=${output}" >&2
+        ls -la "${workspace_dir}/.complytime/" >&2
+    fi
+}
+test_log_file_directory
+
 # --- Summary ---
 
 echo ""

@@ -892,7 +892,7 @@ func TestProcessScanOutput_NoErrors_ReturnsNil(t *testing.T) {
 	policyTargets := []complytime.TargetConfig{{ID: "target-1"}}
 	reqToControl := map[string]string{"req-1": "ctrl-1"}
 
-	err = processScanOutput("", scanOut, "test-repo", reqToControl, policyTargets, "test-policy", []string{"target-1"})
+	err = processScanOutput("", scanOut, "test-repo", reqToControl, policyTargets, "test-policy", []string{"target-1"}, tmpDir)
 	assert.NoError(t, err)
 }
 
@@ -921,7 +921,7 @@ func TestProcessScanOutput_WithErrors_ReturnsError(t *testing.T) {
 	policyTargets := []complytime.TargetConfig{{ID: "target-1"}}
 	reqToControl := map[string]string{"req-1": "ctrl-1"}
 
-	err = processScanOutput("", scanOut, "test-repo", reqToControl, policyTargets, "test-policy", []string{"target-1"})
+	err = processScanOutput("", scanOut, "test-repo", reqToControl, policyTargets, "test-policy", []string{"target-1"}, tmpDir)
 	w.Close()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "1 operational error")
@@ -1029,67 +1029,67 @@ func TestExtractReqToControlMap_WithControls(t *testing.T) {
 
 func TestEvaluatorArtifactsExist_EmptySlice(t *testing.T) {
 	chdirTemp(t)
-	assert.True(t, evaluatorArtifactsExist(nil), "nil evaluator list should return true")
-	assert.True(t, evaluatorArtifactsExist([]string{}), "empty evaluator list should return true")
+	assert.True(t, evaluatorArtifactsExist(".", nil), "nil evaluator list should return true")
+	assert.True(t, evaluatorArtifactsExist(".", []string{}), "empty evaluator list should return true")
 }
 
 func TestEvaluatorArtifactsExist_DirExistsWithFiles(t *testing.T) {
-	chdirTemp(t)
-	evalDir := filepath.Join(".", complytime.WorkspaceDir, "ampel")
+	baseDir := t.TempDir()
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "ampel")
 	require.NoError(t, os.MkdirAll(evalDir, 0750))
 	require.NoError(t, os.WriteFile(filepath.Join(evalDir, "policy.rego"), []byte("package test"), 0600))
 
-	assert.True(t, evaluatorArtifactsExist([]string{"ampel"}))
+	assert.True(t, evaluatorArtifactsExist(baseDir, []string{"ampel"}))
 }
 
 func TestEvaluatorArtifactsExist_DirMissing(t *testing.T) {
-	chdirTemp(t)
-	assert.False(t, evaluatorArtifactsExist([]string{"ampel"}))
+	baseDir := t.TempDir()
+	assert.False(t, evaluatorArtifactsExist(baseDir, []string{"ampel"}))
 }
 
 func TestEvaluatorArtifactsExist_DirExistsButEmpty(t *testing.T) {
-	chdirTemp(t)
-	evalDir := filepath.Join(".", complytime.WorkspaceDir, "ampel")
+	baseDir := t.TempDir()
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "ampel")
 	require.NoError(t, os.MkdirAll(evalDir, 0750))
 
-	assert.False(t, evaluatorArtifactsExist([]string{"ampel"}))
+	assert.False(t, evaluatorArtifactsExist(baseDir, []string{"ampel"}))
 }
 
 func TestEvaluatorArtifactsExist_MultipleEvaluators_AllPresent(t *testing.T) {
-	chdirTemp(t)
+	baseDir := t.TempDir()
 	for _, id := range []string{"ampel", "openscap"} {
-		evalDir := filepath.Join(".", complytime.WorkspaceDir, id)
+		evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, id)
 		require.NoError(t, os.MkdirAll(evalDir, 0750))
 		require.NoError(t, os.WriteFile(filepath.Join(evalDir, "artifact.json"), []byte("{}"), 0600))
 	}
 
-	assert.True(t, evaluatorArtifactsExist([]string{"ampel", "openscap"}))
+	assert.True(t, evaluatorArtifactsExist(baseDir, []string{"ampel", "openscap"}))
 }
 
 func TestEvaluatorArtifactsExist_MultipleEvaluators_OneMissing(t *testing.T) {
-	chdirTemp(t)
-	evalDir := filepath.Join(".", complytime.WorkspaceDir, "ampel")
+	baseDir := t.TempDir()
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "ampel")
 	require.NoError(t, os.MkdirAll(evalDir, 0750))
 	require.NoError(t, os.WriteFile(filepath.Join(evalDir, "artifact.json"), []byte("{}"), 0600))
 
-	assert.False(t, evaluatorArtifactsExist([]string{"ampel", "openscap"}),
+	assert.False(t, evaluatorArtifactsExist(baseDir, []string{"ampel", "openscap"}),
 		"should return false when any evaluator directory is missing")
 }
 
 func TestEvaluatorArtifactsExist_PathIsFile(t *testing.T) {
-	chdirTemp(t)
-	require.NoError(t, os.MkdirAll(complytime.WorkspaceDir, 0750))
-	filePath := filepath.Join(".", complytime.WorkspaceDir, "ampel")
+	baseDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(baseDir, complytime.WorkspaceDir), 0750))
+	filePath := filepath.Join(baseDir, complytime.WorkspaceDir, "ampel")
 	require.NoError(t, os.WriteFile(filePath, []byte("not a dir"), 0600))
 
-	assert.False(t, evaluatorArtifactsExist([]string{"ampel"}),
+	assert.False(t, evaluatorArtifactsExist(baseDir, []string{"ampel"}),
 		"should return false when path is a file, not a directory")
 }
 
 // --- needsRegeneration tests ---
 
 func TestNeedsRegeneration_NilState(t *testing.T) {
-	assert.True(t, needsRegeneration(nil, "sha256:abc", "test-policy"),
+	assert.True(t, needsRegeneration(".", nil, "sha256:abc", "test-policy"),
 		"nil generation state should require regeneration")
 }
 
@@ -1098,13 +1098,13 @@ func TestNeedsRegeneration_StaleDigest(t *testing.T) {
 		PolicyDigest: "sha256:old",
 		EvaluatorIDs: []string{"ampel"},
 	}
-	assert.True(t, needsRegeneration(state, "sha256:new", "test-policy"),
+	assert.True(t, needsRegeneration(".", state, "sha256:new", "test-policy"),
 		"mismatched digest should require regeneration")
 }
 
 func TestNeedsRegeneration_FreshWithArtifacts(t *testing.T) {
-	chdirTemp(t)
-	evalDir := filepath.Join(".", complytime.WorkspaceDir, "ampel")
+	baseDir := t.TempDir()
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "ampel")
 	require.NoError(t, os.MkdirAll(evalDir, 0750))
 	require.NoError(t, os.WriteFile(filepath.Join(evalDir, "policy.rego"), []byte("package test"), 0600))
 
@@ -1112,17 +1112,341 @@ func TestNeedsRegeneration_FreshWithArtifacts(t *testing.T) {
 		PolicyDigest: "sha256:current",
 		EvaluatorIDs: []string{"ampel"},
 	}
-	assert.False(t, needsRegeneration(state, "sha256:current", "test-policy"),
+	assert.False(t, needsRegeneration(baseDir, state, "sha256:current", "test-policy"),
 		"fresh digest with existing artifacts should not require regeneration")
 }
 
 func TestNeedsRegeneration_FreshButArtifactsMissing(t *testing.T) {
-	chdirTemp(t)
+	baseDir := t.TempDir()
 	// Do not create the evaluator directory — simulates deleted artifacts.
 	state := &policy.GenerationState{
 		PolicyDigest: "sha256:current",
 		EvaluatorIDs: []string{"ampel"},
 	}
-	assert.True(t, needsRegeneration(state, "sha256:current", "test-policy"),
+	assert.True(t, needsRegeneration(baseDir, state, "sha256:current", "test-policy"),
 		"fresh digest but missing artifacts should require regeneration")
+}
+
+// --- lazyLogWriter tests ---
+
+func TestLazyLogWriter_Write_CreatesLogFile(t *testing.T) {
+	baseDir := t.TempDir()
+	w := &lazyLogWriter{}
+	w.SetWorkspace(baseDir)
+
+	n, err := w.Write([]byte("test log line\n"))
+
+	require.NoError(t, err)
+	assert.Equal(t, 14, n)
+
+	logPath := filepath.Join(baseDir, complytime.WorkspaceDir, complytime.LogFileName)
+	content, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, "test log line\n", string(content))
+
+	require.NoError(t, w.Close())
+}
+
+func TestLazyLogWriter_Write_DefaultBaseDir(t *testing.T) {
+	chdirTemp(t)
+	w := &lazyLogWriter{}
+	// No SetWorkspace call — should default to "."
+
+	n, err := w.Write([]byte("default dir\n"))
+
+	require.NoError(t, err)
+	assert.Equal(t, 12, n)
+
+	logPath := filepath.Join(".", complytime.WorkspaceDir, complytime.LogFileName)
+	_, statErr := os.Stat(logPath)
+	assert.NoError(t, statErr, "log file should exist in cwd .complytime/")
+
+	require.NoError(t, w.Close())
+}
+
+func TestLazyLogWriter_Close_NilFile(t *testing.T) {
+	w := &lazyLogWriter{}
+	// Never written to — file is nil.
+	assert.NoError(t, w.Close())
+}
+
+func TestLazyLogWriter_Write_MultipleWrites(t *testing.T) {
+	baseDir := t.TempDir()
+	w := &lazyLogWriter{}
+	w.SetWorkspace(baseDir)
+
+	_, err := w.Write([]byte("first\n"))
+	require.NoError(t, err)
+	_, err = w.Write([]byte("second\n"))
+	require.NoError(t, err)
+
+	require.NoError(t, w.Close())
+
+	logPath := filepath.Join(baseDir, complytime.WorkspaceDir, complytime.LogFileName)
+	content, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, "first\nsecond\n", string(content))
+}
+
+// --- New() tests ---
+
+func TestNew_ReturnsValidCommand(t *testing.T) {
+	cmd := New()
+	require.NotNil(t, cmd)
+	assert.Equal(t, "complyctl [command]", cmd.Use)
+
+	// Verify workspace flag is registered as a persistent flag.
+	wsFlag := cmd.PersistentFlags().Lookup("workspace")
+	require.NotNil(t, wsFlag, "workspace flag should be registered")
+	assert.Equal(t, "w", wsFlag.Shorthand)
+
+	// Verify subcommands are registered.
+	subNames := make([]string, 0, len(cmd.Commands()))
+	for _, sub := range cmd.Commands() {
+		subNames = append(subNames, sub.Name())
+	}
+	assert.Contains(t, subNames, "scan")
+	assert.Contains(t, subNames, "init")
+	assert.Contains(t, subNames, "doctor")
+	assert.Contains(t, subNames, "get")
+	assert.Contains(t, subNames, "generate")
+	assert.Contains(t, subNames, "list")
+	assert.Contains(t, subNames, "providers")
+	assert.Contains(t, subNames, "version")
+}
+
+func TestNew_PersistentPreRunSetsWorkspace(t *testing.T) {
+	baseDir := t.TempDir()
+	cmd := New()
+	require.NotNil(t, cmd.PersistentPreRun)
+	// Set the workspace flag and invoke PersistentPreRun.
+	require.NoError(t, cmd.PersistentFlags().Set("workspace", baseDir))
+	cmd.PersistentPreRun(cmd, nil)
+	// Verify the log writer workspace was set by writing to it.
+	_, err := lw.Write([]byte("test\n"))
+	require.NoError(t, err)
+
+	// PostRun closes the file.
+	require.NotNil(t, cmd.PersistentPostRun)
+	cmd.PersistentPostRun(cmd, nil)
+}
+
+// --- workspace resolution in run methods ---
+
+func TestScanOptions_Run_WithWorkspaceFlag(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte(minimalConfig), 0o600))
+
+	o := &scanOptions{
+		Common:   &Common{Workspace: dir},
+		policyID: "test-policy",
+		timeout:  5 * time.Second,
+		cacheDir: t.TempDir(),
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	// Should get past workspace resolution — fail at a later stage (cache).
+	assert.NotContains(t, err.Error(), "failed to load workspace config")
+}
+
+func TestGenerateOptions_Run_WithWorkspaceFlag(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte(minimalConfig), 0o600))
+
+	o := &generateOptions{
+		Common:   &Common{Workspace: dir},
+		policyID: "test-policy",
+		timeout:  5 * time.Second,
+		cacheDir: t.TempDir(),
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "failed to load workspace config")
+}
+
+func TestGetOptions_Run_WithWorkspaceFlag(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte(minimalConfig), 0o600))
+
+	o := &getOptions{
+		Common:   &Common{Workspace: dir},
+		timeout:  5 * time.Second,
+		cacheDir: t.TempDir(),
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	// Should get past workspace resolution — fail at cache/registry stage.
+	assert.NotContains(t, err.Error(), "failed to load workspace config")
+}
+
+func TestListOptions_Run_WithWorkspaceFlag(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte(minimalConfig), 0o600))
+
+	var buf bytes.Buffer
+	o := &listOptions{
+		Common:   &Common{Workspace: dir, Output: Output{Out: &buf}},
+		cacheDir: t.TempDir(),
+	}
+	err := o.run(context.Background())
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "POLICY ID")
+}
+
+func TestInitOptions_Run_WithWorkspaceFlag_NoExistingConfig(t *testing.T) {
+	dir := t.TempDir()
+	o := &initOptions{Common: &Common{Workspace: dir}}
+
+	// init calls promptPolicies which reads stdin — will get EOF immediately
+	// and produce an empty config template.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = origStdin })
+
+	err = o.run()
+	require.NoError(t, err)
+
+	// Verify config was created in the workspace.
+	configPath := filepath.Join(dir, ".complytime", "complytime.yaml")
+	_, statErr := os.Stat(configPath)
+	assert.NoError(t, statErr, "config file should be created in workspace")
+}
+
+func TestInitOptions_Run_WithWorkspaceFlag_AlreadyExists(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte(minimalConfig), 0o600))
+
+	o := &initOptions{Common: &Common{Workspace: dir}}
+	err := o.run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+// --- doctorCmd tests ---
+
+func TestDoctorCmd_ReturnsCommand(t *testing.T) {
+	common := &Common{}
+	cmd := doctorCmd(common)
+	require.NotNil(t, cmd)
+	assert.Equal(t, "doctor", cmd.Use)
+
+	// Verify verbose flag is registered.
+	vFlag := cmd.Flags().Lookup("verbose")
+	require.NotNil(t, vFlag)
+}
+
+func TestDoctorCmd_RunE_InvalidWorkspace(t *testing.T) {
+	common := &Common{Workspace: "/nonexistent/path/xyz123"}
+	cmd := doctorCmd(common)
+	err := cmd.RunE(cmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestDoctorCmd_RunE_ValidWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	// Create a minimal config so doctor doesn't get nil config.
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte("policies:\n  - url: registry.example.com/p@v1\ntargets: []"), 0o600))
+
+	common := &Common{Workspace: dir}
+	cmd := doctorCmd(common)
+	// Doctor runs diagnostic checks and prints results. With a valid config
+	// but no providers/cache it reports failures but does not error (non-blocking).
+	err := cmd.RunE(cmd, nil)
+	// May fail due to blocking checks (no providers found), which is expected.
+	// The key assertion: it gets past workspace resolution successfully.
+	if err != nil {
+		assert.Contains(t, err.Error(), "blocking checks failed")
+	}
+}
+
+// --- completeTargetIDs workspace resolution ---
+
+func TestScanOptions_Run_InvalidWorkspacePath(t *testing.T) {
+	o := &scanOptions{
+		Common:  &Common{Workspace: "/nonexistent/path/xyz123"},
+		timeout: 5 * time.Second,
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestGenerateOptions_Run_InvalidWorkspacePath(t *testing.T) {
+	o := &generateOptions{
+		Common:   &Common{Workspace: "/nonexistent/path/xyz123"},
+		policyID: "test",
+		timeout:  5 * time.Second,
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestGetOptions_Run_InvalidWorkspacePath(t *testing.T) {
+	o := &getOptions{
+		Common:  &Common{Workspace: "/nonexistent/path/xyz123"},
+		timeout: 5 * time.Second,
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestListOptions_Run_InvalidWorkspacePath(t *testing.T) {
+	var buf bytes.Buffer
+	o := &listOptions{
+		Common:   &Common{Workspace: "/nonexistent/path/xyz123", Output: Output{Out: &buf}},
+		cacheDir: t.TempDir(),
+	}
+	err := o.run(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestCompleteTargetIDs_WithWorkspaceConfig(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".complytime")
+	require.NoError(t, os.MkdirAll(configDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "complytime.yaml"),
+		[]byte(multiPolicyConfig), 0o600))
+
+	// completeTargetIDs uses ResolveWorkspaceDir(""), which falls back to cwd.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(dir))
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	ids, directive := completeTargetIDs(nil, nil, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Contains(t, ids, "prod")
+	assert.Contains(t, ids, "staging")
 }

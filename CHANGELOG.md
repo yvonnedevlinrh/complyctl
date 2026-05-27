@@ -10,6 +10,9 @@
 
 ### Added
 
+- Workspace configuration: `--workspace` / `-w` flag and `COMPLYTIME_WORKSPACE` environment variable for running commands from any directory (#433)
+- Config file location: `complytime.yaml` moved to `.complytime/complytime.yaml` with backward compatibility (#527)
+- Deprecation warning for legacy config file location at repository root
 - Complypack pull support: `complyctl get` fetches complypack OCI
   artifacts declared in the `complypacks` section of `complytime.yaml`.
   Cached complypacks are dispatched to providers by evaluator-id during
@@ -39,6 +42,12 @@
   + `complytime-mapping.json`), `test-opa-bp` policy-id and
   `test-k8s-deployment` target in workspace configuration. OPA command
   reference added to `docs/TESTING_ENVIRONMENT.md`.
+
+### Changed
+
+- All commands now accept `--workspace` flag to specify workspace directory
+- `NewWorkspace()` function signature changed from `NewWorkspace()` to `NewWorkspace(baseDir string)`
+- Log file and scan output paths are now relative to resolved workspace directory
 
 ### Fixed
 

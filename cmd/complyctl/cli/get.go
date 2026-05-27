@@ -70,7 +70,12 @@ func (o *getOptions) run(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	cfg, err := loadWorkspaceConfig()
+	baseDir, err := o.ResolveWorkspace()
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadWorkspaceConfig(baseDir)
 	if err != nil {
 		return err
 	}

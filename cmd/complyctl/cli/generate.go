@@ -74,7 +74,12 @@ func (o *generateOptions) run(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	cfg, err := loadWorkspaceConfig()
+	baseDir, err := o.ResolveWorkspace()
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadWorkspaceConfig(baseDir)
 	if err != nil {
 		return err
 	}
@@ -84,10 +89,10 @@ func (o *generateOptions) run(ctx context.Context) error {
 		return fmt.Errorf("policy %q not found in config — run complyctl list to see available policy IDs", o.policyID)
 	}
 
-	return o.generatePolicy(ctx, cfg, *entry)
+	return o.generatePolicy(ctx, cfg, *entry, baseDir)
 }
 
-func (o *generateOptions) generatePolicy(ctx context.Context, cfg *complytime.WorkspaceConfig, entry complytime.PolicyEntry) error {
+func (o *generateOptions) generatePolicy(ctx context.Context, cfg *complytime.WorkspaceConfig, entry complytime.PolicyEntry, baseDir string) error {
 	ref := complytime.ParsePolicyRef(entry.URL)
 	eid := entry.EffectiveID()
 
@@ -112,7 +117,7 @@ func (o *generateOptions) generatePolicy(ctx context.Context, cfg *complytime.Wo
 		return err
 	}
 
-	return saveGenerationAndPrint(o.cacheDir, ref.Repository, eid, evaluatorIDs, planRows)
+	return saveGenerationAndPrint(o.cacheDir, baseDir, ref.Repository, eid, evaluatorIDs, planRows)
 }
 
 func invokeGenerate(ctx context.Context, cacheDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string) ([]string, []output.ExecutionPlanRow, error) {
@@ -153,14 +158,14 @@ func providerStatus(mgr *provider.Manager, evalID string) string {
 	return "healthy"
 }
 
-func saveGenerationAndPrint(cacheDir, repository, eid string, evaluatorIDs []string, planRows []output.ExecutionPlanRow) error {
+func saveGenerationAndPrint(cacheDir, baseDir, repository, eid string, evaluatorIDs []string, planRows []output.ExecutionPlanRow) error {
 	cacheState, err := cache.LoadState(cacheDir)
 	if err != nil {
 		return fmt.Errorf("failed to load cache state: %w", err)
 	}
 	policyState, _ := cacheState.GetPolicyState(repository)
 	genState := policy.NewGenerationState(repository, policyState.Digest, evaluatorIDs)
-	if err := policy.SaveGenerationState(".", repository, genState); err != nil {
+	if err := policy.SaveGenerationState(baseDir, repository, genState); err != nil {
 		return fmt.Errorf("failed to save generation state: %w", err)
 	}
 
