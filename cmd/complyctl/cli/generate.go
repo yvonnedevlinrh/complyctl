@@ -111,9 +111,8 @@ func (o *generateOptions) generatePolicy(ctx context.Context, cfg *complytime.Wo
 	configs := policy.ExtractAssessmentConfigs(ref.Repository, graph)
 	groups := policy.GroupByEvaluator(configs, graph)
 	policyTargets := filterTargetsForPolicy(cfg.Targets, eid)
-	globalVars := complytime.WithWorkspaceVar(cfg.Variables, baseDir)
 
-	evaluatorIDs, planRows, err := invokeGenerate(ctx, o.cacheDir, mgr, groups, policyTargets, globalVars)
+	evaluatorIDs, planRows, err := invokeGenerate(ctx, o.cacheDir, baseDir, mgr, groups, policyTargets, cfg.Variables)
 	if err != nil {
 		return err
 	}
@@ -121,11 +120,12 @@ func (o *generateOptions) generatePolicy(ctx context.Context, cfg *complytime.Wo
 	return saveGenerationAndPrint(o.cacheDir, baseDir, ref.Repository, eid, evaluatorIDs, planRows)
 }
 
-func invokeGenerate(ctx context.Context, cacheDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string) ([]string, []output.ExecutionPlanRow, error) {
+func invokeGenerate(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, configVars map[string]string) ([]string, []output.ExecutionPlanRow, error) {
 	spin := terminal.NewSpinner("Generating policy artifacts...")
 	spin.Start()
 	defer spin.Stop()
 
+	globalVars := complytime.WithWorkspaceVar(configVars, baseDir)
 	if err := generateForAllTargets(ctx, cacheDir, mgr, groups, policyTargets, globalVars); err != nil {
 		return nil, nil, err
 	}

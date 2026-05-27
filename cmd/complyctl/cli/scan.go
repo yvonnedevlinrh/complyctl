@@ -263,12 +263,11 @@ func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceC
 
 	policyTargets := filterTargetsForPolicy(cfg.Targets, eid)
 	evaluatorIDs := evaluatorIDList(groups)
-	globalVars := complytime.WithWorkspaceVar(cfg.Variables, baseDir)
 
 	// Generation runs for ALL targets referencing the policy (per D7:
 	// generation freshness is policy-scoped, not target-scoped). Narrowing
 	// before generation would silently skip targets that were never generated.
-	if err := ensureGenerated(ctx, o.cacheDir, baseDir, mgr, groups, policyTargets, globalVars, ref.Repository, eid, evaluatorIDs); err != nil {
+	if err := ensureGenerated(ctx, o.cacheDir, baseDir, mgr, groups, policyTargets, cfg.Variables, ref.Repository, eid, evaluatorIDs); err != nil {
 		return err
 	}
 
@@ -352,7 +351,7 @@ func targetIDList(targets []complytime.TargetConfig) []string {
 	return ids
 }
 
-func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, eid string, evaluatorIDs []string) error {
+func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, configVars map[string]string, repository, eid string, evaluatorIDs []string) error {
 	needsGenerate, policyDigest, err := checkGenerationFreshness(cacheDir, baseDir, repository, eid)
 	if err != nil {
 		return err
@@ -360,6 +359,7 @@ func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provide
 	if !needsGenerate {
 		return nil
 	}
+	globalVars := complytime.WithWorkspaceVar(configVars, baseDir)
 	return runGeneration(ctx, cacheDir, baseDir, mgr, groups, policyTargets, globalVars, repository, policyDigest, evaluatorIDs)
 }
 

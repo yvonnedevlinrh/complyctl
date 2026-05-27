@@ -102,7 +102,10 @@ func runDoctor(baseDir string, verbose bool) error {
 	versionResolver := &registryVersionResolver{timeout: 5 * time.Second}
 
 	results := doctor.Run(cfg, configPath, providerDir, cacheDir, resolver, versionResolver, verbose, logger)
+	return printDiagnostics(results)
+}
 
+func printDiagnostics(results []doctor.CheckResult) error {
 	fmt.Println("Running workspace diagnostics...")
 	fmt.Println()
 
