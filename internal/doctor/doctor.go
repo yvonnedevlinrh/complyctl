@@ -418,13 +418,22 @@ func CheckVariables(cfg *complytime.WorkspaceConfig, healthData []ProviderHealth
 		}
 	}
 
+	// effectiveGlobalVars merges config-defined globals with system-injected
+	// variables. complyctl auto-injects workspace at runtime (see #433 item 5);
+	// doctor treats it as satisfied without requiring a YAML entry.
+	effectiveGlobalVars := make(map[string]string, len(cfg.Variables)+1)
+	for k, v := range cfg.Variables {
+		effectiveGlobalVars[k] = v
+	}
+	effectiveGlobalVars[complytime.WorkspaceVarKey] = "(auto-injected)"
+
 	var results []CheckResult
 
 	for _, ph := range healthData {
-		globalResolved, globalTotal := countResolved(ph.RequiredGlobalVariables, cfg.Variables)
+		globalResolved, globalTotal := countResolved(ph.RequiredGlobalVariables, effectiveGlobalVars)
 		var missingGlobals []string
 		for _, v := range ph.RequiredGlobalVariables {
-			if _, ok := cfg.Variables[v]; !ok {
+			if _, ok := effectiveGlobalVars[v]; !ok {
 				missingGlobals = append(missingGlobals, v)
 			}
 		}
@@ -493,7 +502,7 @@ func CheckVariables(cfg *complytime.WorkspaceConfig, healthData []ProviderHealth
 		if verbose {
 			for _, v := range ph.RequiredGlobalVariables {
 				status := complytime.StatusPassed
-				if _, ok := cfg.Variables[v]; !ok {
+				if _, ok := effectiveGlobalVars[v]; !ok {
 					status = complytime.StatusFailed
 				}
 				results = append(results, CheckResult{

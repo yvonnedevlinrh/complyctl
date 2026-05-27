@@ -79,6 +79,23 @@ const OCIEmptyConfig = "application/vnd.oci.empty.v1+json"
 // WorkspaceEnvVar is the environment variable name for workspace directory resolution.
 const WorkspaceEnvVar = "COMPLYTIME_WORKSPACE"
 
+// WorkspaceVarKey is the variable key used to inject the resolved workspace
+// directory into provider variable maps. Providers receive this as a global
+// variable during generation and as a target variable during scan.
+const WorkspaceVarKey = "workspace"
+
+// WithWorkspaceVar returns a copy of vars with the workspace key set to the
+// resolved workspace directory. User-defined values for the same key are
+// overridden so providers always receive the absolute resolved path.
+func WithWorkspaceVar(vars map[string]string, workspace string) map[string]string {
+	merged := make(map[string]string, len(vars)+1)
+	for k, v := range vars {
+		merged[k] = v
+	}
+	merged[WorkspaceVarKey] = workspace
+	return merged
+}
+
 // Scan result status emoji indicators for terminal summary table (FR-037).
 const (
 	StatusPassed  = "✅"

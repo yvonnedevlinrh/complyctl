@@ -1431,6 +1431,46 @@ func TestListOptions_Run_InvalidWorkspacePath(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not exist")
 }
 
+// --- injectWorkspaceIntoTargets tests ---
+
+func TestInjectWorkspaceIntoTargets_InjectsWorkspace(t *testing.T) {
+	targets := []complytime.TargetConfig{
+		{ID: "prod", Variables: map[string]string{"profile": "cis"}},
+		{ID: "staging", Variables: map[string]string{"profile": "stig"}},
+	}
+	result := injectWorkspaceIntoTargets(targets, "/resolved/workspace")
+
+	for _, target := range result {
+		assert.Equal(t, "/resolved/workspace", target.Variables[complytime.WorkspaceVarKey])
+	}
+	assert.Equal(t, "cis", result[0].Variables["profile"])
+	assert.Equal(t, "stig", result[1].Variables["profile"])
+}
+
+func TestInjectWorkspaceIntoTargets_DoesNotMutateOriginal(t *testing.T) {
+	targets := []complytime.TargetConfig{
+		{ID: "prod", Variables: map[string]string{"profile": "cis"}},
+	}
+	_ = injectWorkspaceIntoTargets(targets, "/workspace")
+
+	_, hasWorkspace := targets[0].Variables[complytime.WorkspaceVarKey]
+	assert.False(t, hasWorkspace, "original target variables must not be mutated")
+}
+
+func TestInjectWorkspaceIntoTargets_NilVariables(t *testing.T) {
+	targets := []complytime.TargetConfig{
+		{ID: "prod"},
+	}
+	result := injectWorkspaceIntoTargets(targets, "/workspace")
+
+	assert.Equal(t, "/workspace", result[0].Variables[complytime.WorkspaceVarKey])
+}
+
+func TestInjectWorkspaceIntoTargets_EmptySlice(t *testing.T) {
+	result := injectWorkspaceIntoTargets(nil, "/workspace")
+	assert.Empty(t, result)
+}
+
 func TestCompleteTargetIDs_WithWorkspaceConfig(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, ".complytime")

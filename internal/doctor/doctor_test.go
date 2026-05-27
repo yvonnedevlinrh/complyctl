@@ -621,6 +621,57 @@ func TestCheckVariables_Verbose_UnmappedTargetVars(t *testing.T) {
 	}
 }
 
+func TestCheckVariables_WorkspaceAutoInjected_NotInConfig(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Variables: map[string]string{},
+	}
+	health := []ProviderHealth{{
+		EvaluatorID:             "test",
+		RequiredGlobalVariables: []string{complytime.WorkspaceVarKey},
+	}}
+
+	results := CheckVariables(cfg, health, nil, false)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected pass (workspace auto-injected), got %s: %s",
+			results[0].Status, results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "1/1 global vars") {
+		t.Errorf("expected workspace counted as resolved, got %q", results[0].Message)
+	}
+}
+
+func TestCheckVariables_WorkspaceAutoInjected_Verbose(t *testing.T) {
+	cfg := &complytime.WorkspaceConfig{
+		Variables: map[string]string{},
+	}
+	health := []ProviderHealth{{
+		EvaluatorID:             "test",
+		RequiredGlobalVariables: []string{complytime.WorkspaceVarKey, "output_dir"},
+	}}
+
+	results := CheckVariables(cfg, health, nil, true)
+
+	foundWorkspacePassed := false
+	foundOutputDirFailed := false
+	for _, r := range results {
+		if strings.Contains(r.Message, complytime.WorkspaceVarKey) && strings.Contains(r.Message, complytime.StatusPassed) {
+			foundWorkspacePassed = true
+		}
+		if strings.Contains(r.Message, "output_dir") && strings.Contains(r.Message, complytime.StatusFailed) {
+			foundOutputDirFailed = true
+		}
+	}
+	if !foundWorkspacePassed {
+		t.Error("expected verbose detail showing workspace as passed (auto-injected)")
+	}
+	if !foundOutputDirFailed {
+		t.Error("expected verbose detail showing output_dir as failed")
+	}
+}
+
 // --- CheckPolicyActivePeriod Tests ---
 
 func TestCheckPolicyActivePeriod_NilConfig(t *testing.T) {

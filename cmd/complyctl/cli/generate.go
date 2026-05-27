@@ -111,8 +111,9 @@ func (o *generateOptions) generatePolicy(ctx context.Context, cfg *complytime.Wo
 	configs := policy.ExtractAssessmentConfigs(ref.Repository, graph)
 	groups := policy.GroupByEvaluator(configs, graph)
 	policyTargets := filterTargetsForPolicy(cfg.Targets, eid)
+	globalVars := complytime.WithWorkspaceVar(cfg.Variables, baseDir)
 
-	evaluatorIDs, planRows, err := invokeGenerate(ctx, o.cacheDir, mgr, groups, policyTargets, cfg.Variables)
+	evaluatorIDs, planRows, err := invokeGenerate(ctx, o.cacheDir, mgr, groups, policyTargets, globalVars)
 	if err != nil {
 		return err
 	}

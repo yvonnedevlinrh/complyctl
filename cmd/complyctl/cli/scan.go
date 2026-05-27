@@ -263,11 +263,12 @@ func (o *scanOptions) scanPolicy(ctx context.Context, cfg *complytime.WorkspaceC
 
 	policyTargets := filterTargetsForPolicy(cfg.Targets, eid)
 	evaluatorIDs := evaluatorIDList(groups)
+	globalVars := complytime.WithWorkspaceVar(cfg.Variables, baseDir)
 
 	// Generation runs for ALL targets referencing the policy (per D7:
 	// generation freshness is policy-scoped, not target-scoped). Narrowing
 	// before generation would silently skip targets that were never generated.
-	if err := ensureGenerated(ctx, o.cacheDir, baseDir, mgr, groups, policyTargets, cfg.Variables, ref.Repository, eid, evaluatorIDs); err != nil {
+	if err := ensureGenerated(ctx, o.cacheDir, baseDir, mgr, groups, policyTargets, globalVars, ref.Repository, eid, evaluatorIDs); err != nil {
 		return err
 	}
 
@@ -368,7 +369,8 @@ func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provide
 func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string, baseDir string) error {
 	reqToControl := extractReqToControlMap(graph)
 	planToReq := extractPlanToReqMap(graph)
-	scanOut, err := executeScan(ctx, mgr, groups, policyTargets)
+	targetsWithWorkspace := injectWorkspaceIntoTargets(policyTargets, baseDir)
+	scanOut, err := executeScan(ctx, mgr, groups, targetsWithWorkspace)
 	if err != nil {
 		return err
 	}
@@ -517,6 +519,7 @@ func runGeneration(ctx context.Context, cacheDir, baseDir string, mgr *provider.
 
 func generateForAllTargets(ctx context.Context, cacheDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string) error {
 	complypackCache := cache.NewComplypackCache(cacheDir)
+	workspace := globalVars[complytime.WorkspaceVarKey]
 	for evalID, group := range groups {
 		// Look up cached complypack content for this evaluator-id.
 		// If no complypack is cached, contentPath is "" (backward compatible).
@@ -525,7 +528,8 @@ func generateForAllTargets(ctx context.Context, cacheDir string, mgr *provider.M
 			return fmt.Errorf("failed to look up complypack for evaluator %s: %w", evalID, err)
 		}
 		for _, target := range policyTargets {
-			if err := mgr.RouteGenerate(ctx, evalID, globalVars, target.Variables, group.Configs, contentPath); err != nil {
+			targetVars := complytime.WithWorkspaceVar(target.Variables, workspace)
+			if err := mgr.RouteGenerate(ctx, evalID, globalVars, targetVars, group.Configs, contentPath); err != nil {
 				return err
 			}
 		}
@@ -818,6 +822,19 @@ func countExportFailures(results []exportResult) int {
 		}
 	}
 	return count
+}
+
+// injectWorkspaceIntoTargets returns a copy of targets with the resolved
+// workspace directory injected into each target's Variables map. This ensures
+// providers receive the absolute workspace path during scan without mutating
+// the original config.
+func injectWorkspaceIntoTargets(targets []complytime.TargetConfig, baseDir string) []complytime.TargetConfig {
+	result := make([]complytime.TargetConfig, len(targets))
+	for i, t := range targets {
+		result[i] = t
+		result[i].Variables = complytime.WithWorkspaceVar(t.Variables, baseDir)
+	}
+	return result
 }
 
 // extractReqToControlMap builds a requirement-ID → control-ID mapping
