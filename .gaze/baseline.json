@@ -978,28 +978,9 @@
     },
     {
       "package": "main",
-      "function": "registerEnrichRoute",
-      "file": "cmd/mock-oci-registry/main.go",
-      "line": 201,
-      "complexity": 5,
-      "line_coverage": 0,
-      "crap": 30,
-      "fix_strategy": "add_tests"
-    },
-    {
-      "package": "main",
       "function": "writeOCIError",
       "file": "cmd/mock-oci-registry/main.go",
       "line": 226,
-      "complexity": 1,
-      "line_coverage": 0,
-      "crap": 2
-    },
-    {
-      "package": "main",
-      "function": "writeJSONError",
-      "file": "cmd/mock-oci-registry/main.go",
-      "line": 236,
       "complexity": 1,
       "line_coverage": 0,
       "crap": 2
@@ -1049,15 +1030,6 @@
       "complexity": 1,
       "line_coverage": 0,
       "crap": 2
-    },
-    {
-      "package": "main",
-      "function": "(*contentStore).enrich",
-      "file": "cmd/mock-oci-registry/main.go",
-      "line": 415,
-      "complexity": 2,
-      "line_coverage": 0,
-      "crap": 6
     },
     {
       "package": "main",

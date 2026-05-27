@@ -14,7 +14,7 @@ BINARY="${REPO_ROOT}/bin/complyctl"
 MOCK_REGISTRY="${REPO_ROOT}/bin/mock-oci-registry"
 TEST_PLUGIN="${REPO_ROOT}/bin/complyctl-provider-test"
 
-POLICY_ID="policies/nist-800-53-r5"
+POLICY_ID="policies/test-branch-protection"
 REGISTRY_PORT="${GEMARA_SERVICE_PORT:-8765}"
 REGISTRY_URL="http://localhost:${REGISTRY_PORT}"
 
@@ -123,7 +123,7 @@ WORK_DIR="$(mktemp -d)"
 export HOME="${TEST_HOME}"
 
 mkdir -p "${TEST_HOME}/.complytime/providers"
-cp "${TEST_PLUGIN}" "${TEST_HOME}/.complytime/providers/"
+cp "${TEST_PLUGIN}" "${TEST_HOME}/.complytime/providers/complyctl-provider-ampel"
 echo "  HOME=${TEST_HOME}"
 echo "  WORK=${WORK_DIR}"
 
@@ -169,7 +169,7 @@ OUT="$(run_complyctl get)"
 echo "${OUT}"
 assert_contains "get: sync completed" "${OUT}" "Synchronization completed."
 assert_file_exists "get: oci-layout exists" \
-    "${TEST_HOME}/.complytime/policies/policies/nist-800-53-r5/oci-layout" >/dev/null
+    "${TEST_HOME}/.complytime/policies/policies/test-branch-protection/oci-layout" >/dev/null
 assert_file_exists "get: state.json exists" \
     "${TEST_HOME}/.complytime/state.json" >/dev/null
 
@@ -177,7 +177,7 @@ echo ""
 echo "=== list ==="
 OUT="$(run_complyctl list)"
 echo "${OUT}"
-assert_contains "list: shows policy" "${OUT}" "nist-800-53-r5"
+assert_contains "list: shows policy" "${OUT}" "test-branch-protection"
 
 echo ""
 echo "=== generate ==="
