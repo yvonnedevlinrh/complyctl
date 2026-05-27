@@ -418,14 +418,7 @@ func CheckVariables(cfg *complytime.WorkspaceConfig, healthData []ProviderHealth
 		}
 	}
 
-	// effectiveGlobalVars merges config-defined globals with system-injected
-	// variables. complyctl auto-injects workspace at runtime (see #433 item 5);
-	// doctor treats it as satisfied without requiring a YAML entry.
-	effectiveGlobalVars := make(map[string]string, len(cfg.Variables)+1)
-	for k, v := range cfg.Variables {
-		effectiveGlobalVars[k] = v
-	}
-	effectiveGlobalVars[complytime.WorkspaceVarKey] = "(auto-injected)"
+	effectiveGlobalVars := effectiveGlobals(cfg.Variables)
 
 	var results []CheckResult
 
@@ -839,6 +832,18 @@ func checkCollectorAuth(auth *complytime.AuthConfig) CheckResult {
 		Status:  StatusPass,
 		Message: fmt.Sprintf("OIDC client credentials configured (token-endpoint: %s)", auth.TokenEndpoint),
 	}
+}
+
+// effectiveGlobals merges config-defined global variables with system-injected
+// variables that complyctl auto-injects at runtime. Doctor treats these as
+// satisfied without requiring a YAML entry (see #433 item 5).
+func effectiveGlobals(configVars map[string]string) map[string]string {
+	merged := make(map[string]string, len(configVars)+1)
+	for k, v := range configVars {
+		merged[k] = v
+	}
+	merged[complytime.WorkspaceVarKey] = "(auto-injected)"
+	return merged
 }
 
 func joinNames(names []string) string {
