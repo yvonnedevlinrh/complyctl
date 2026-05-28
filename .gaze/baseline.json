@@ -1746,7 +1746,8 @@
       "line": 93,
       "complexity": 4,
       "line_coverage": 25,
-      "crap": 10.75
+      "crap": 10.75,
+      "gaze_crap": 4
     },
     {
       "package": "doctor",
@@ -1765,7 +1766,8 @@
       "line": 218,
       "complexity": 11,
       "line_coverage": 100,
-      "crap": 11
+      "crap": 11,
+      "gaze_crap": 11
     },
     {
       "package": "doctor",
@@ -1783,7 +1785,8 @@
       "line": 321,
       "complexity": 5,
       "line_coverage": 90.9090909090909,
-      "crap": 5.018782870022539
+      "crap": 5.018782870022539,
+      "gaze_crap": 5
     },
     {
       "package": "doctor",
@@ -1793,6 +1796,7 @@
       "complexity": 34,
       "line_coverage": 87.65432098765432,
       "crap": 36.17521794517172,
+      "gaze_crap": 34,
       "fix_strategy": "decompose"
     },
     {
@@ -1802,7 +1806,8 @@
       "line": 542,
       "complexity": 11,
       "line_coverage": 92.85714285714286,
-      "crap": 11.044096209912537
+      "crap": 11.044096209912537,
+      "gaze_crap": 11
     },
     {
       "package": "doctor",
@@ -1847,7 +1852,8 @@
       "line": 677,
       "complexity": 5,
       "line_coverage": 100,
-      "crap": 5
+      "crap": 5,
+      "gaze_crap": 5
     },
     {
       "package": "doctor",
