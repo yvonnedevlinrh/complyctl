@@ -47,7 +47,7 @@ func main() {
 	registerOCIRoutes(mux, store)
 
 	addr := ":" + port
-	log.Printf("mock-oci-registry listening on http://localhost%s", addr)
+	log.Printf("mock-oci-registry listening on http://localhost%s", addr) //nolint:gosec // G706: addr is derived from env port with hardcoded fallback
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -64,6 +64,7 @@ func registerOCIRoutes(mux *http.ServeMux, store *contentStore) {
 		path := strings.TrimPrefix(r.URL.Path, "/v2/")
 		path = strings.TrimSuffix(path, "/")
 
+		// GET /v2/ — API version check
 		if path == "" {
 			w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
 			w.Header().Set("Content-Type", "application/json")
@@ -72,23 +73,32 @@ func registerOCIRoutes(mux *http.ServeMux, store *contentStore) {
 			return
 		}
 
+		// GET /v2/_catalog
 		if path == "_catalog" {
 			serveCatalog(w, store)
 			return
 		}
 
+		// Route: /v2/{name}/tags/list
 		if idx := strings.LastIndex(path, "/tags/list"); idx > 0 {
-			serveTagsList(w, store, path[:idx])
+			repoName := path[:idx]
+			serveTagsList(w, store, repoName)
 			return
 		}
 
+		// Route: /v2/{name}/manifests/{reference}
 		if idx := strings.LastIndex(path, "/manifests/"); idx > 0 {
-			serveManifest(w, r, store, path[:idx], path[idx+len("/manifests/"):])
+			repoName := path[:idx]
+			reference := path[idx+len("/manifests/"):]
+			serveManifest(w, r, store, repoName, reference)
 			return
 		}
 
+		// Route: /v2/{name}/blobs/{digest}
 		if idx := strings.LastIndex(path, "/blobs/"); idx > 0 {
-			serveBlob(w, store, path[:idx], path[idx+len("/blobs/"):])
+			repoName := path[:idx]
+			digest := path[idx+len("/blobs/"):]
+			serveBlob(w, store, repoName, digest)
 			return
 		}
 
@@ -155,7 +165,7 @@ func serveManifest(w http.ResponseWriter, r *http.Request, store *contentStore, 
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(art.manifestBytes) //nolint:gosec
+	_, _ = w.Write(art.manifestBytes) //nolint:gosec // G705: internal test mock data, not user-tainted
 }
 
 // serveBlob handles GET /v2/{name}/blobs/{digest}
