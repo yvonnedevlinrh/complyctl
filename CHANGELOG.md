@@ -2,8 +2,27 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+- `--format otel` removed from `complyctl scan`. Export is now triggered
+  via the `COMPLYTIME_EXPORT_ENABLED=true` environment variable and works
+  alongside any `--format` flag.
+
 ### Added
 
+- Complypack pull support: `complyctl get` fetches complypack OCI
+  artifacts declared in the `complypacks` section of `complytime.yaml`.
+  Cached complypacks are dispatched to providers by evaluator-id during
+  generation. `complyctl providers` shows cached complypack versions.
+  `complyctl doctor` checks complypack availability.
+- `complyctl scan` accepts a positional `[target]` argument to scope
+  scans to a single target. When a target has exactly one policy, the
+  `--policy-id` flag is inferred automatically.
+- Policy resolver supports both split-layer and Gemara bundle-format OCI
+  artifacts. `internal/policy/loader.go` gained `LoadBundleFiles()` and
+  `DetectManifestShape()`.
+- `complyctl scan` exits non-zero on operational errors from providers.
+  `ScanResponse.errors` proto field surfaces provider-side errors.
 - Devcontainer configuration for interactive CLI testing during PR
   reviews (`.devcontainer/`, `docs/TESTING_ENVIRONMENT.md`,
   `make test-devcontainer`). Supports GitHub Codespaces, DevPod, and
@@ -20,3 +39,10 @@
   + `complytime-mapping.json`), `test-opa-bp` policy-id and
   `test-k8s-deployment` target in workspace configuration. OPA command
   reference added to `docs/TESTING_ENVIRONMENT.md`.
+
+### Fixed
+
+- Scan reports now resolve assessment plan IDs to requirement IDs,
+  ensuring output displays meaningful identifiers instead of internal
+  plan references. Affects EvaluationLog, OSCAL, SARIF, and Markdown
+  output formats.

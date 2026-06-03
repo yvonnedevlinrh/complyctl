@@ -103,7 +103,7 @@ func TestFormatScanSummary_AllPassed(t *testing.T) {
 
 	output := FormatScanSummary(assessments, assessmentTargets, reqToControl, policyID, targetIDs)
 
-	assert.Contains(t, output, "2 requirements: 2 passed, 0 failed, 0 skipped, 0 error")
+	assert.Contains(t, output, "2 requirements: 2 passed, 0 failed, 0 skipped, 0 errors")
 	assert.NotContains(t, output, "TARGET ID")
 }
 

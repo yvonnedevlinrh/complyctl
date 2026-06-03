@@ -285,6 +285,10 @@ packages organized by domain responsibility.
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- fix-resolve-plan-ids: `complyctl scan` resolves assessment plan IDs to requirement and control IDs in scan reports via `extractPlanToReqMap()`/`resolveAssessmentIDs()` in `cmd/complyctl/cli/scan.go`
+- complypack-pull: `complyctl get` fetches complypack OCI artifacts when `complypacks:` configured in `complytime.yaml`; `complyctl providers` gains COMPLYPACK column; `complyctl doctor` gains complypack cache check; `GenerateRequest.complypack_content_path` proto field added; `internal/cache/complypack*.go` cache/sync/source modules; `internal/cache/state.go` extended with complypack state tracking
+- scan-target-arg: `complyctl scan [target]` positional argument for scoping scans to a single target with automatic policy-id inference
+- cross-repo-integration-tests: Cross-repo integration test infrastructure (`tests/cross-repo/`, `make test-cross-repo`, `ci_cross_repo_integration.yml`) validating complyctl + Ampel provider pipeline
 - opa-devcontainer-content: Added OPA provider test content to devcontainer; OPA Gemara testdata (catalog + policy with `executor.id: opa`) seeded in mock registry; Rego policies + `complytime-mapping.json` for complypack; `test-opa-bp` policy-id and `test-k8s-deployment` target in `complytime.yaml`; `docs/TESTING_ENVIRONMENT.md` OPA command reference
 - devcontainer-bundle-cache: Mock OCI registry gains `seedFromDirectory()` to serve mounted Gemara YAML policies from `/bundles/` (or `COMPLYCTL_BUNDLES_DIR`); post-create script adds policy entries to `complytime.yaml`; `docs/TESTING_ENVIRONMENT.md` Private Bundles section added
 - dev-testing-environment: Added `.devcontainer/` with Fedora-based devcontainer for interactive CLI testing; `docs/TESTING_ENVIRONMENT.md` documentation; `make test-devcontainer` CI smoke target; post-create script with GITHUB_TOKEN least-privilege handling

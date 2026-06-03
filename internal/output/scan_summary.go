@@ -124,7 +124,7 @@ func FormatScanSummary(assessments []provider.AssessmentLog, assessmentTargets [
 		rows = append(rows, []string{e.targetID, e.requirementID, e.controlID, e.emoji, e.message})
 	}
 
-	conclusion := fmt.Sprintf("%d requirements: %d passed, %d failed, %d skipped, %d error",
+	conclusion := fmt.Sprintf("%d requirements: %d passed, %d failed, %d skipped, %d errors",
 		total, passCount, failCount, skipCount, errCount)
 
 	var b strings.Builder

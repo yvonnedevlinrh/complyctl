@@ -27,6 +27,8 @@ type PolicyState struct {
 	LastUpdated time.Time `json:"last_updated"`
 }
 
+// LoadState reads and parses the state.json file from the given cache directory.
+// Returns a fresh State with empty maps if the file does not exist.
 func LoadState(cacheDir string) (*State, error) {
 	statePath := filepath.Join(cacheDir, complytime.StateFileName)
 
@@ -64,6 +66,7 @@ func initStateMaps(s *State) {
 	}
 }
 
+// SaveState writes the state to state.json in the given cache directory.
 func SaveState(state *State, cacheDir string) error {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
@@ -83,6 +86,7 @@ func SaveState(state *State, cacheDir string) error {
 	return nil
 }
 
+// UpdatePolicyState records the version, digest, and current timestamp for a cached policy.
 func (s *State) UpdatePolicyState(policyID, version, digest string) {
 	if s.Policies == nil {
 		s.Policies = make(map[string]PolicyState)
@@ -95,6 +99,7 @@ func (s *State) UpdatePolicyState(policyID, version, digest string) {
 	s.LastSync = time.Now()
 }
 
+// GetPolicyState returns the cached state for a policy identified by policyID.
 func (s *State) GetPolicyState(policyID string) (PolicyState, bool) {
 	if s.Policies == nil {
 		return PolicyState{}, false

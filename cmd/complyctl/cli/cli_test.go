@@ -927,6 +927,76 @@ func TestProcessScanOutput_WithErrors_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "1 operational error")
 }
 
+// --- extractPlanToReqMap tests ---
+
+func TestExtractPlanToReqMap_NilGraph(t *testing.T) {
+	m := extractPlanToReqMap(nil)
+	assert.Empty(t, m)
+}
+
+func TestExtractPlanToReqMap_WithAssessments(t *testing.T) {
+	graph := &policy.DependencyGraph{
+		Assessments: []policy.Assessment{
+			{ID: "ap-1", RequirementID: "req-1"},
+			{ID: "ap-2", RequirementID: "req-2"},
+			{ID: "ap-3", RequirementID: ""}, // empty requirement — should be skipped
+		},
+	}
+	m := extractPlanToReqMap(graph)
+	assert.Equal(t, "req-1", m["ap-1"])
+	assert.Equal(t, "req-2", m["ap-2"])
+	_, exists := m["ap-3"]
+	assert.False(t, exists, "empty RequirementID should not be mapped")
+}
+
+func TestExtractPlanToReqMap_EmptyAssessments(t *testing.T) {
+	graph := &policy.DependencyGraph{
+		Assessments: []policy.Assessment{},
+	}
+	m := extractPlanToReqMap(graph)
+	assert.Empty(t, m)
+}
+
+// --- resolveAssessmentIDs tests ---
+
+func TestResolveAssessmentIDs_ReplacesMatchingIDs(t *testing.T) {
+	assessments := []provider.AssessmentLog{
+		{RequirementID: "ap-1"},
+		{RequirementID: "req-already-correct"},
+	}
+	planToReq := map[string]string{"ap-1": "req-1"}
+	resolveAssessmentIDs(assessments, planToReq)
+	assert.Equal(t, "req-1", assessments[0].RequirementID)
+	assert.Equal(t, "req-already-correct", assessments[1].RequirementID)
+}
+
+func TestResolveAssessmentIDs_EmptyMap(t *testing.T) {
+	assessments := []provider.AssessmentLog{{RequirementID: "ap-1"}}
+	resolveAssessmentIDs(assessments, map[string]string{})
+	assert.Equal(t, "ap-1", assessments[0].RequirementID)
+}
+
+func TestResolveAssessmentIDs_NilAssessments(t *testing.T) {
+	resolveAssessmentIDs(nil, map[string]string{"ap-1": "req-1"})
+	// Should not panic
+}
+
+func TestResolveAssessmentIDs_AllReplaced(t *testing.T) {
+	assessments := []provider.AssessmentLog{
+		{RequirementID: "ap-1"},
+		{RequirementID: "ap-2"},
+	}
+	planToReq := map[string]string{
+		"ap-1": "req-1",
+		"ap-2": "req-2",
+	}
+	resolveAssessmentIDs(assessments, planToReq)
+	assert.Equal(t, "req-1", assessments[0].RequirementID)
+	assert.Equal(t, "req-2", assessments[1].RequirementID)
+}
+
+// --- extractReqToControlMap tests ---
+
 func TestExtractReqToControlMap_NilGraph(t *testing.T) {
 	m := extractReqToControlMap(nil)
 	assert.Empty(t, m)
