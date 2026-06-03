@@ -97,7 +97,93 @@ cp tests/cross-repo/testdata/complytime.yaml \
 cp tests/cross-repo/testdata/granular-policies/block-force-push.json \
     "${HOME}/test-workspace/.complytime/ampel/granular-policies/"
 
+# Copy OPA test deployment input file for the test-k8s-deployment target
+if [[ -f tests/cross-repo/testdata/test-deployment.yaml ]]; then
+    cp tests/cross-repo/testdata/test-deployment.yaml \
+        "${HOME}/test-workspace/"
+    echo "    Copied OPA test deployment input"
+fi
+
 echo "    Test workspace ready at ~/test-workspace/"
+
+# ---------------------------------------------------------------------------
+# Step 4b: Register mounted policy bundles with mock registry (optional)
+#
+# If a bundles directory exists (default: /bundles/, override via
+# COMPLYCTL_BUNDLES_DIR), discover Gemara policy directories and add
+# them to complytime.yaml. The mock registry (Step 5) serves these
+# files via seedFromDirectory(), so complyctl get populates the cache
+# through normal code paths — no cache bypass needed.
+#
+# Expected bundle format (raw Gemara YAML, not OCI Layout):
+#   /bundles/my-policy/catalog.yaml
+#   /bundles/my-policy/policy.yaml
+# ---------------------------------------------------------------------------
+BUNDLES_DIR="${COMPLYCTL_BUNDLES_DIR:-/bundles}"
+if [[ -d "${BUNDLES_DIR}" ]]; then
+    echo ">>> [optional] Registering mounted policies from ${BUNDLES_DIR}..."
+    CONFIG_FILE="${HOME}/test-workspace/complytime.yaml"
+
+    BUNDLE_COUNT=0
+    for bundle_dir in "${BUNDLES_DIR}"/*/; do
+        # Guard against glob matching nothing
+        [[ -d "${bundle_dir}" ]] || continue
+
+        bundle_name="$(basename "${bundle_dir}")"
+
+        # Validate bundle name: only alphanumeric, hyphens, underscores
+        if [[ ! "${bundle_name}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "    Skipping ${bundle_name} (invalid characters in name)"
+            continue
+        fi
+
+        # Verify required Gemara YAML files exist
+        if [[ ! -f "${bundle_dir}/catalog.yaml" ]]; then
+            echo "    Skipping ${bundle_name} (no catalog.yaml)"
+            continue
+        fi
+        if [[ ! -f "${bundle_dir}/policy.yaml" ]]; then
+            echo "    Skipping ${bundle_name} (no policy.yaml)"
+            continue
+        fi
+
+        # Insert policy entry into complytime.yaml if not already present.
+        # Points at the mock registry (localhost:8765) which serves files
+        # from the bundles directory via seedFromDirectory().
+        if ! grep -q "http://localhost:8765/policies/${bundle_name}" "${CONFIG_FILE}" 2>/dev/null; then
+            # Insert before the first 'targets:' line to stay in policies block.
+            if grep -q "^targets:" "${CONFIG_FILE}" 2>/dev/null; then
+                awk -v name="${bundle_name}" '
+                    /^targets:/ {
+                        print "  - url: http://localhost:8765/policies/" name
+                        print "    id: " name
+                    }
+                    { print }
+                ' "${CONFIG_FILE}" > "${CONFIG_FILE}.tmp"
+                mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"
+            else
+                printf '  - url: http://localhost:8765/policies/%s\n    id: %s\n' \
+                    "${bundle_name}" "${bundle_name}" >> "${CONFIG_FILE}"
+            fi
+            echo "    Added ${bundle_name} to complytime.yaml"
+        else
+            echo "    ${bundle_name} already in complytime.yaml, skipping."
+        fi
+
+        BUNDLE_COUNT=$((BUNDLE_COUNT + 1))
+    done
+
+    if [[ ${BUNDLE_COUNT} -gt 0 ]]; then
+        echo "    Registered ${BUNDLE_COUNT} bundle(s) for mock registry."
+        echo "    After registry starts, use: complyctl get && complyctl generate"
+    else
+        echo "    No valid Gemara policy directories found in ${BUNDLES_DIR}."
+    fi
+else
+    echo ">>> No bundles directory at ${BUNDLES_DIR}, skipping policy"
+    echo "    registration. Mount Gemara YAML policies at /bundles/ or"
+    echo "    set COMPLYCTL_BUNDLES_DIR to enable."
+fi
 
 # ---------------------------------------------------------------------------
 # Step 5: Start mock OCI registry
@@ -106,7 +192,8 @@ if curl -sf http://localhost:8765/v2/ > /dev/null 2>&1; then
     echo ">>> Mock OCI registry already running on port 8765."
 else
     echo ">>> Starting mock OCI registry..."
-    nohup ./bin/mock-oci-registry > /tmp/mock-oci-registry.log 2>&1 &
+    MOCK_REGISTRY_CONTENT_DIR="${COMPLYCTL_BUNDLES_DIR:-/bundles}" \
+        nohup ./bin/mock-oci-registry > /tmp/mock-oci-registry.log 2>&1 &
     REGISTRY_PID=$!
     disown ${REGISTRY_PID}
 

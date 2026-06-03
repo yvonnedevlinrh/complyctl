@@ -220,6 +220,78 @@ GITHUB_TOKEN=<your-token> complyctl scan \
 # Expected: Scan results with requirement status
 ```
 
+## Private Bundles
+
+The devcontainer can serve private Gemara policies through
+the mock OCI registry without pushing them to an external
+registry or committing them to the repository. Mounted
+policies are served alongside the built-in test content,
+so the standard `complyctl get` -> `generate` -> `scan`
+workflow works for all policies.
+
+### Setup
+
+Place raw Gemara YAML files in a directory and mount it
+into the devcontainer at `/bundles/` (or set
+`COMPLYCTL_BUNDLES_DIR` to a custom path):
+
+```
+/bundles/
+└── my-private-policy/
+    ├── catalog.yaml
+    └── policy.yaml
+```
+
+Each subdirectory under `/bundles/` containing both
+`catalog.yaml` and `policy.yaml` is automatically
+discovered and served by the mock registry during
+container setup.
+
+### Mounting bundles with DevPod
+
+Use the `--workspace-env` flag to set the bundles path, and
+configure a volume mount in `devcontainer.json`:
+
+```bash
+devpod up github.com/complytime/complyctl \
+    --ide none \
+    --dotfiles none
+```
+
+Or add a `mounts` entry to `.devcontainer/devcontainer.json`:
+
+```json
+"mounts": [
+    "source=/path/to/local/bundles,target=/bundles,type=bind,readonly"
+]
+```
+
+### Using bundles
+
+After the devcontainer starts, mounted policies are served
+by the mock registry. Use the standard workflow:
+
+```bash
+cd ~/test-workspace
+
+# Fetch policies from the mock registry (including mounted ones)
+complyctl get
+
+# Generate and scan as usual
+complyctl generate --policy-id my-private-policy
+complyctl scan --policy-id my-private-policy
+```
+
+### How it works
+
+The mock OCI registry's `seedFromDirectory()` reads Gemara
+catalog and policy YAML files from the mounted bundles
+directory and serves them as OCI artifacts, exactly like
+the embedded test content. The post-create script adds
+policy entries to `complytime.yaml` pointing at the mock
+registry (`http://localhost:8765/policies/{name}`), so `complyctl
+get` populates the cache through normal code paths.
+
 ## Troubleshooting
 
 ### Mock registry not running
