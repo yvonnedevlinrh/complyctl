@@ -25,16 +25,16 @@ func TestExtractAssessmentConfigs_ThreeAssessments(t *testing.T) {
 	graph := &DependencyGraph{
 		PolicyID: "nist",
 		Assessments: []Assessment{
-			{ID: "ap-1", EvaluatorID: "openscap", Parameters: map[string]string{"profile": "xccdf_ssg"}},
-			{ID: "ap-2", EvaluatorID: "openscap"},
-			{ID: "ap-3", EvaluatorID: "kube-eval"},
+			{ID: "ap-1", RequirementID: "req-1", EvaluatorID: "openscap", Parameters: map[string]string{"profile": "xccdf_ssg"}},
+			{ID: "ap-2", RequirementID: "req-2", EvaluatorID: "openscap"},
+			{ID: "ap-3", RequirementID: "req-3", EvaluatorID: "kube-eval"},
 		},
 	}
 	configs := ExtractAssessmentConfigs("nist", graph)
 	require.Len(t, configs, 3)
 
 	assert.Equal(t, "nist", configs[0].PlanID)
-	assert.Equal(t, "ap-1", configs[0].RequirementID)
+	assert.Equal(t, "ap-1", configs[0].RequirementID, "providers receive plan ID, not requirement ID")
 	assert.Equal(t, "openscap", configs[0].EvaluatorID)
 	assert.Equal(t, "xccdf_ssg", configs[0].Parameters["profile"])
 

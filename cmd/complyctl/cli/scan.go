@@ -358,11 +358,13 @@ func ensureGenerated(ctx context.Context, cacheDir string, mgr *provider.Manager
 // to processScanOutput.
 func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, repository, eid string, graph *policy.DependencyGraph, targetIDs []string) error {
 	reqToControl := extractReqToControlMap(graph)
+	planToReq := extractPlanToReqMap(graph)
 	scanOut, err := executeScan(ctx, mgr, groups, policyTargets)
 	if err != nil {
 		return err
 	}
 
+	resolveAssessmentIDs(scanOut.assessments, planToReq)
 	return processScanOutput(format, scanOut, repository, reqToControl, policyTargets, eid, targetIDs)
 }
 
@@ -827,4 +829,30 @@ func extractReqToControlMap(graph *policy.DependencyGraph) map[string]string {
 		}
 	}
 	return m
+}
+
+// extractPlanToReqMap builds a plan-ID → requirement-ID mapping from the
+// assessment plans in the dependency graph. Providers return plan IDs in
+// their results; this map resolves them to actual requirement IDs.
+func extractPlanToReqMap(graph *policy.DependencyGraph) map[string]string {
+	m := make(map[string]string)
+	if graph == nil {
+		return m
+	}
+	for _, a := range graph.Assessments {
+		if a.RequirementID != "" {
+			m[a.ID] = a.RequirementID
+		}
+	}
+	return m
+}
+
+// resolveAssessmentIDs replaces plan IDs in assessment results with actual
+// requirement IDs using the plan-to-requirement mapping from the policy graph.
+func resolveAssessmentIDs(assessments []provider.AssessmentLog, planToReq map[string]string) {
+	for i := range assessments {
+		if reqID, ok := planToReq[assessments[i].RequirementID]; ok {
+			assessments[i].RequirementID = reqID
+		}
+	}
 }

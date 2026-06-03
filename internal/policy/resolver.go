@@ -36,9 +36,10 @@ type Guideline struct {
 
 // Assessment holds a single assessment entry with its optional evaluator binding.
 type Assessment struct {
-	ID          string
-	EvaluatorID string
-	Parameters  map[string]string
+	ID            string
+	RequirementID string
+	EvaluatorID   string
+	Parameters    map[string]string
 }
 
 // PolicyTimeline captures the evaluation and enforcement periods from a
@@ -275,8 +276,9 @@ func extractFromGemaraPolicy(p *gemara.Policy) policyLayerResult {
 		evalIDSet[evalID] = true
 
 		assessments = append(assessments, Assessment{
-			ID:          plan.Id,
-			EvaluatorID: evalID,
+			ID:            plan.Id,
+			RequirementID: plan.RequirementId,
+			EvaluatorID:   evalID,
 		})
 	}
 

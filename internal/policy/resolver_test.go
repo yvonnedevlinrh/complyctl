@@ -257,6 +257,7 @@ adherence:
 	assert.Equal(t, "openscap", result.EvaluatorID)
 	assert.Len(t, result.Assessments, 1)
 	assert.Equal(t, "ap-1", result.Assessments[0].ID)
+	assert.Equal(t, "req-1", result.Assessments[0].RequirementID)
 	assert.Equal(t, "openscap", result.Assessments[0].EvaluatorID)
 }
 
@@ -310,15 +311,17 @@ func TestExtractFromGemaraPolicy_SingleEvaluator(t *testing.T) {
 		Adherence: gemara.Adherence{
 			AssessmentPlans: []gemara.AssessmentPlan{
 				{
-					Id:        "ap-1",
-					Frequency: "daily",
+					Id:            "ap-1",
+					RequirementId: "req-1",
+					Frequency:     "daily",
 					EvaluationMethods: []gemara.AcceptedMethod{
 						{Mode: gemara.ModeAutomated, Executor: gemara.Actor{Id: "openscap"}},
 					},
 				},
 				{
-					Id:        "ap-2",
-					Frequency: "weekly",
+					Id:            "ap-2",
+					RequirementId: "req-2",
+					Frequency:     "weekly",
 					EvaluationMethods: []gemara.AcceptedMethod{
 						{Mode: gemara.ModeAutomated, Executor: gemara.Actor{Id: "openscap"}},
 					},
@@ -330,6 +333,10 @@ func TestExtractFromGemaraPolicy_SingleEvaluator(t *testing.T) {
 	result := extractFromGemaraPolicy(p)
 	assert.Equal(t, "openscap", result.EvaluatorID)
 	assert.Len(t, result.Assessments, 2)
+	assert.Equal(t, "ap-1", result.Assessments[0].ID)
+	assert.Equal(t, "req-1", result.Assessments[0].RequirementID)
+	assert.Equal(t, "ap-2", result.Assessments[1].ID)
+	assert.Equal(t, "req-2", result.Assessments[1].RequirementID)
 }
 
 func TestExtractFromGemaraPolicy_MixedEvaluators(t *testing.T) {
@@ -337,15 +344,17 @@ func TestExtractFromGemaraPolicy_MixedEvaluators(t *testing.T) {
 		Adherence: gemara.Adherence{
 			AssessmentPlans: []gemara.AssessmentPlan{
 				{
-					Id:        "ap-1",
-					Frequency: "daily",
+					Id:            "ap-1",
+					RequirementId: "req-1",
+					Frequency:     "daily",
 					EvaluationMethods: []gemara.AcceptedMethod{
 						{Mode: gemara.ModeAutomated, Executor: gemara.Actor{Id: "openscap"}},
 					},
 				},
 				{
-					Id:        "ap-2",
-					Frequency: "weekly",
+					Id:            "ap-2",
+					RequirementId: "req-2",
+					Frequency:     "weekly",
 					EvaluationMethods: []gemara.AcceptedMethod{
 						{Mode: gemara.ModeAutomated, Executor: gemara.Actor{Id: "kube-eval"}},
 					},
@@ -358,6 +367,8 @@ func TestExtractFromGemaraPolicy_MixedEvaluators(t *testing.T) {
 	assert.Empty(t, result.EvaluatorID)
 	assert.Equal(t, "openscap", result.Assessments[0].EvaluatorID)
 	assert.Equal(t, "kube-eval", result.Assessments[1].EvaluatorID)
+	assert.Equal(t, "req-1", result.Assessments[0].RequirementID)
+	assert.Equal(t, "req-2", result.Assessments[1].RequirementID)
 }
 
 func TestExtractFromGemaraPolicy_Timeline(t *testing.T) {
