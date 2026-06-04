@@ -395,10 +395,10 @@
       "package": "cli",
       "function": "(*providersOptions).run",
       "file": "cmd/complyctl/cli/providers.go",
-      "line": 51,
+      "line": 63,
       "complexity": 4,
-      "line_coverage": 57.142857142857146,
-      "crap": 5.259475218658891
+      "line_coverage": 53.333333333333336,
+      "crap": 5.626074074074074
     },
     {
       "package": "cli",

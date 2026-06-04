@@ -36,7 +36,10 @@ type Guideline struct {
 
 // Assessment holds a single assessment entry with its optional evaluator binding.
 type Assessment struct {
-	ID            string
+	ID string
+	// RequirementID is the requirement ID from the Gemara assessment plan's
+	// requirement-id field. Used post-scan to resolve plan IDs in provider
+	// results to actual requirement IDs for report output.
 	RequirementID string
 	EvaluatorID   string
 	Parameters    map[string]string
