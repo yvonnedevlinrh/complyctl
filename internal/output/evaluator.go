@@ -15,26 +15,33 @@ import (
 	"github.com/complytime/complyctl/pkg/provider"
 )
 
-// Evaluator accumulates per-target provider assessments and produces a
-// gemara.EvaluationLog grouped by control.
+// Evaluator accumulates provider assessments for a single target and produces
+// a gemara.EvaluationLog grouped by control.
 type Evaluator struct {
 	policyID     string
+	targetID     string
 	reqToControl map[string]string
 	controlEvals map[string]*gemara.ControlEvaluation
 	controlOrder []string
 }
 
-// NewEvaluator creates an Evaluator. reqToControl maps requirement IDs to
-// control IDs; pass nil when the catalog is unavailable.
-func NewEvaluator(policyID string, reqToControl map[string]string) *Evaluator {
+// NewEvaluator creates an Evaluator scoped to a single target. reqToControl
+// maps requirement IDs to control IDs; pass nil when the catalog is unavailable.
+func NewEvaluator(policyID, targetID string, reqToControl map[string]string) *Evaluator {
 	if reqToControl == nil {
 		reqToControl = make(map[string]string)
 	}
 	return &Evaluator{
 		policyID:     policyID,
+		targetID:     targetID,
 		reqToControl: reqToControl,
 		controlEvals: make(map[string]*gemara.ControlEvaluation),
 	}
+}
+
+// TargetID returns the target identifier for this evaluator.
+func (e *Evaluator) TargetID() string {
+	return e.targetID
 }
 
 // AddTarget converts provider assessment results for one target into
@@ -66,17 +73,25 @@ func (e *Evaluator) AddTarget(assessments []provider.AssessmentLog) {
 	}
 }
 
-// GemaraLog returns the assembled gemara.EvaluationLog.
+// GemaraLog returns the assembled gemara.EvaluationLog with fully populated
+// metadata, aggregated result, and target resource.
 func (e *Evaluator) GemaraLog() *gemara.EvaluationLog {
 	evals := make([]*gemara.ControlEvaluation, 0, len(e.controlEvals))
 	for _, id := range e.controlOrder {
 		evals = append(evals, e.controlEvals[id])
 	}
 
+	result := gemara.NotRun
+	for _, ce := range evals {
+		result = gemara.UpdateAggregateResult(result, ce.Result)
+	}
+
 	return &gemara.EvaluationLog{
 		Evaluations: evals,
+		Result:      result,
 		Metadata: gemara.Metadata{
 			Id:          e.policyID,
+			Type:        gemara.EvaluationLogArtifact,
 			Description: "Compliance scan evaluation log",
 			Author: gemara.Actor{
 				Id:   "complytime",
@@ -84,6 +99,11 @@ func (e *Evaluator) GemaraLog() *gemara.EvaluationLog {
 				Type: gemara.Software,
 				Uri:  "https://github.com/complytime/complyctl",
 			},
+		},
+		Target: gemara.Resource{
+			Id:   e.targetID,
+			Name: e.targetID,
+			Type: gemara.Software,
 		},
 	}
 }
@@ -101,8 +121,8 @@ func (e *Evaluator) Write(outDir string) (string, error) {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	filename := fmt.Sprintf("evaluation-log-%s-%s.yaml",
-		complytime.FilenameSafe(e.policyID), time.Now().Format("20060102-150405"))
+	filename := fmt.Sprintf("evaluation-log-%s-%s-%s.yaml",
+		complytime.FilenameSafe(e.policyID), complytime.FilenameSafe(e.targetID), time.Now().Format("20060102-150405"))
 	path := filepath.Join(outDir, filename)
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to write evaluation log: %w", err)
@@ -120,7 +140,15 @@ func (e *Evaluator) resolveControl(requirementID string) string {
 
 func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) *gemara.AssessmentLog {
 	result := aggregateResultFromSteps(a.Steps)
-	desc := a.Message
+
+	msg := a.Message
+	if result != gemara.Passed {
+		if stepMsg := matchingStepMessage(a.Steps, result); stepMsg != "" {
+			msg = stepMsg
+		}
+	}
+
+	desc := msg
 	if desc == "" && len(a.Steps) > 0 {
 		desc = a.Steps[0].Name
 	}
@@ -135,7 +163,7 @@ func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) *gemar
 		},
 		Description:     desc,
 		Result:          result,
-		Message:         a.Message,
+		Message:         msg,
 		Applicability:   []string{"default"},
 		Start:           gemara.Datetime(time.Now().Format(time.RFC3339)),
 		StepsExecuted:   int64(len(a.Steps)),

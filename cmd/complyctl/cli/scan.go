@@ -386,13 +386,16 @@ func runScanAndReport(ctx context.Context, format string, mgr *provider.Manager,
 func processScanOutput(format string, scanOut *scanOutput, repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, eid string, targetIDs []string, baseDir string) error {
 	reportOperationalWarnings(scanOut.errors)
 
-	eval := buildEvaluator(repository, reqToControl, policyTargets, scanOut.assessments, scanOut.assessmentTargets)
+	evaluators := buildEvaluators(repository, reqToControl, policyTargets, scanOut.assessments, scanOut.assessmentTargets)
 
 	outDir := filepath.Join(baseDir, complytime.WorkspaceDir, complytime.ScanOutputDir)
-	if err := writeScanReports(format, eval, outDir, baseDir, repository, scanOut.assessments, scanOut.assessmentTargets, reqToControl, eid, targetIDs); err != nil {
-		return err
+	for _, eval := range evaluators {
+		if err := writeScanReports(format, eval, outDir, baseDir, repository); err != nil {
+			return err
+		}
 	}
 
+	fmt.Println(output.FormatScanSummary(scanOut.assessments, scanOut.assessmentTargets, reqToControl, eid, targetIDs))
 	return checkOperationalErrors(scanOut.errors)
 }
 
@@ -418,9 +421,10 @@ func checkOperationalErrors(errors []string) error {
 	return nil
 }
 
-func buildEvaluator(repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, allAssessments []provider.AssessmentLog, assessmentTargets []string) *output.Evaluator {
-	eval := output.NewEvaluator(repository, reqToControl)
+func buildEvaluators(repository string, reqToControl map[string]string, policyTargets []complytime.TargetConfig, allAssessments []provider.AssessmentLog, assessmentTargets []string) []*output.Evaluator {
+	evaluators := make([]*output.Evaluator, 0, len(policyTargets))
 	for _, target := range policyTargets {
+		eval := output.NewEvaluator(repository, target.ID, reqToControl)
 		var targetAssessments []provider.AssessmentLog
 		for j, a := range allAssessments {
 			if assessmentTargets[j] == target.ID {
@@ -428,8 +432,9 @@ func buildEvaluator(repository string, reqToControl map[string]string, policyTar
 			}
 		}
 		eval.AddTarget(targetAssessments)
+		evaluators = append(evaluators, eval)
 	}
-	return eval
+	return evaluators
 }
 
 // filterTargetByID narrows a target slice to the single target matching the
@@ -590,18 +595,17 @@ func scanSingleTarget(ctx context.Context, mgr *provider.Manager, groups map[str
 	return results, operationalErrors, nil
 }
 
-func writeScanReports(format string, eval *output.Evaluator, outDir, reportDir, repository string, allAssessments []provider.AssessmentLog, assessmentTargets []string, reqToControl map[string]string, eid string, targetIDs []string) error {
+func writeScanReports(format string, eval *output.Evaluator, outDir, reportDir, repository string) error {
 	logPath, err := eval.Write(outDir)
 	if err != nil {
 		return fmt.Errorf("failed to write evaluation log: %w", err)
 	}
-	fmt.Printf("Evaluation log written: %s\n", logPath)
+	fmt.Printf("Evaluation log written: %s [target: %s]\n", logPath, eval.TargetID())
 
 	if err := writeFormatReport(format, eval, logPath, reportDir, repository); err != nil {
 		return err
 	}
 
-	fmt.Println(output.FormatScanSummary(allAssessments, assessmentTargets, reqToControl, eid, targetIDs))
 	return nil
 }
 
