@@ -7,6 +7,7 @@ syntax = "proto3";
 
 package complyctl.plugin.v1;
 
+// protolint:disable:next MAX_LINE_LENGTH
 option go_package = "github.com/complytime/complyctl/internal/proto/plugin/v1;pluginv1";
 
 // Plugin service for compliance evaluation
@@ -24,18 +25,22 @@ service Plugin {
   // requirements. Called during plugin discovery and doctor diagnostics.
   rpc Describe(DescribeRequest) returns (DescribeResponse);
 
-  // Export ships scan evidence to a Beacon collector via ProofWatch.
-  // Called during `complyctl scan` when COMPLYTIME_EXPORT_ENABLED is set, after scan completes.
-  // Only plugins that declare supports_export=true in DescribeResponse
-  // will receive this call.
+  // Export ships scan evidence to a Beacon collector
+  // via ProofWatch. Called during `complyctl scan` when
+  // COMPLYTIME_EXPORT_ENABLED is set, after scan completes.
+  // Only plugins that declare supports_export=true in
+  // DescribeResponse will receive this call.
   rpc Export(ExportRequest) returns (ExportResponse);
 }
 
-// GenerateRequest contains assessment plan configuration for policy preparation.
+// GenerateRequest contains assessment plan configuration
+// for policy preparation.
 // Uses the three-tier variable model (R48):
 //   Tier 1: global_variables — workspace-level variables
-//   Tier 2: target_variables — per-target variables from complytime.yaml targets[].variables
-//   Tier 3: test variables — per-requirement (in AssessmentConfiguration.parameters)
+//   Tier 2: target_variables — per-target variables
+//          from complytime.yaml targets[].variables
+//   Tier 3: test variables — per-requirement
+//          (in AssessmentConfiguration.parameters)
 message GenerateRequest {
   // Workspace-level variables from complytime.yaml `variables` section.
   // See R48: specs/001-gemara-native-workflow/research.md
@@ -141,6 +146,7 @@ message Step {
 // ConfidenceLevel indicates the evaluator's confidence in an assessment result.
 // Mirrors go-gemara ConfidenceLevel enum (1:1 mapping, no lossy conversion).
 enum ConfidenceLevel {
+  // protolint:disable:next ENUM_FIELD_NAMES_ZERO_VALUE_END_WITH
   CONFIDENCE_LEVEL_NOT_SET = 0;
   CONFIDENCE_LEVEL_UNDETERMINED = 1;
   CONFIDENCE_LEVEL_LOW = 2;
