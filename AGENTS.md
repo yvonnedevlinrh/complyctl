@@ -80,7 +80,6 @@ make crapload-check     # check for CRAP regressions against baseline
 | Integration Test | `integration_test.yml` | Shell-based integration tests |
 | Cross-Repo Integration | `ci_cross_repo_integration.yml` | Cross-repo integration tests with complytime-providers |
 | CRAP Load | `ci_crapload.yml` | CRAP analysis on PRs (reusable from org-infra) |
-| CRAP Main | `ci_crapload_main.yml` | CRAP baseline updates on main |
 | Security | `ci_security.yml` | Security scanning |
 | Compliance | `ci_compliance.yml` | Compliance checks |
 | Dependencies | `ci_dependencies.yml` | Dependency management |
