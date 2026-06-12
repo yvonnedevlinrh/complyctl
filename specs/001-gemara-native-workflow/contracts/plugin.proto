@@ -28,7 +28,8 @@ service Plugin {
 
 // GenerateRequest contains assessment plan configuration for policy preparation
 message GenerateRequest {
-  // Global variables from workspace config top-level `variables` section (R48, R49)
+  // Global variables from workspace config top-level
+  // `variables` section (R48, R49).
   // Workspace-scoped config (e.g., scan output directory)
   map<string, string> global_variables = 1;
 
@@ -110,6 +111,7 @@ message Step {
 // ConfidenceLevel indicates the evaluator's confidence in an assessment result
 // Mirrors go-gemara ConfidenceLevel enum
 enum ConfidenceLevel {
+  // protolint:disable:next ENUM_FIELD_NAMES_ZERO_VALUE_END_WITH
   CONFIDENCE_LEVEL_NOT_SET = 0;
   CONFIDENCE_LEVEL_UNDETERMINED = 1;
   CONFIDENCE_LEVEL_LOW = 2;
