@@ -111,7 +111,7 @@ func (s *ComplypackSync) SyncComplypack(ctx context.Context, repository, version
 		return false, fmt.Errorf("failed to store complypack %s@%s: %w", repository, version, err)
 	}
 
-	s.state.UpdateComplypackState(repository, version, remoteDigest)
+	s.state.UpdateComplypackState(repository, version, remoteDigest, result.Config.EvaluatorID)
 	if err := SaveState(s.state, s.complypackCache.Dir()); err != nil {
 		return false, fmt.Errorf("failed to save state after complypack sync: %w (complypack blobs are valid)", err)
 	}

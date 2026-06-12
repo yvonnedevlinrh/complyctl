@@ -24,6 +24,7 @@ type State struct {
 type PolicyState struct {
 	Version     string    `json:"version"`
 	Digest      string    `json:"digest"`
+	EvaluatorID string    `json:"evaluator_id,omitempty"`
 	LastUpdated time.Time `json:"last_updated"`
 }
 
@@ -108,15 +109,17 @@ func (s *State) GetPolicyState(policyID string) (PolicyState, bool) {
 	return state, exists
 }
 
-// UpdateComplypackState records the version, digest, and current timestamp for
-// a cached complypack, keyed by repository (e.g., "example.com/complypacks/opa-bundle").
-func (s *State) UpdateComplypackState(evaluatorID, version, digest string) {
+// UpdateComplypackState records the version, digest, evaluator-id, and current
+// timestamp for a cached complypack, keyed by repository
+// (e.g., "example.com/complypacks/opa-bundle").
+func (s *State) UpdateComplypackState(repository, version, digest, evaluatorID string) {
 	if s.Complypacks == nil {
 		s.Complypacks = make(map[string]PolicyState)
 	}
-	s.Complypacks[evaluatorID] = PolicyState{
+	s.Complypacks[repository] = PolicyState{
 		Version:     version,
 		Digest:      digest,
+		EvaluatorID: evaluatorID,
 		LastUpdated: time.Now(),
 	}
 	s.LastSync = time.Now()
@@ -124,10 +127,10 @@ func (s *State) UpdateComplypackState(evaluatorID, version, digest string) {
 
 // GetComplypackState returns the cached state for a complypack, keyed by
 // repository (e.g., "example.com/complypacks/opa-bundle").
-func (s *State) GetComplypackState(evaluatorID string) (PolicyState, bool) {
+func (s *State) GetComplypackState(repository string) (PolicyState, bool) {
 	if s.Complypacks == nil {
 		return PolicyState{}, false
 	}
-	state, exists := s.Complypacks[evaluatorID]
+	state, exists := s.Complypacks[repository]
 	return state, exists
 }

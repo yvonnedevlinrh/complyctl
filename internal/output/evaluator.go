@@ -18,24 +18,42 @@ import (
 // Evaluator accumulates provider assessments for a single target and produces
 // a gemara.EvaluationLog grouped by control.
 type Evaluator struct {
-	policyID     string
-	targetID     string
-	reqToControl map[string]string
-	controlEvals map[string]*gemara.ControlEvaluation
-	controlOrder []string
+	policyID           string
+	targetID           string
+	reqToControl       map[string]string
+	reqToPlan          map[string]string
+	reqToComplypackRef map[string]string
+	controlEvals       map[string]*gemara.ControlEvaluation
+	controlOrder       []string
+	// controlStepNames tracks step name strings parallel to each control's
+	// AssessmentLogs slice. Keyed by control ID, each value is a slice of
+	// step name slices (one per assessment log under that control).
+	controlStepNames map[string][][]string
+}
+
+// defaultMap returns m if non-nil, otherwise a new empty map.
+func defaultMap(m map[string]string) map[string]string {
+	if m == nil {
+		return make(map[string]string)
+	}
+	return m
 }
 
 // NewEvaluator creates an Evaluator scoped to a single target. reqToControl
 // maps requirement IDs to control IDs; pass nil when the catalog is unavailable.
-func NewEvaluator(policyID, targetID string, reqToControl map[string]string) *Evaluator {
-	if reqToControl == nil {
-		reqToControl = make(map[string]string)
-	}
+// reqToPlan maps requirement IDs to assessment plan IDs for populating the Plan
+// field; pass nil when unavailable. reqToComplypackRef maps requirement IDs
+// directly to OCI references (repository@digest) for step identity; pass nil
+// when no complypacks are configured.
+func NewEvaluator(policyID, targetID string, reqToControl, reqToPlan, reqToComplypackRef map[string]string) *Evaluator {
 	return &Evaluator{
-		policyID:     policyID,
-		targetID:     targetID,
-		reqToControl: reqToControl,
-		controlEvals: make(map[string]*gemara.ControlEvaluation),
+		policyID:           policyID,
+		targetID:           targetID,
+		reqToControl:       defaultMap(reqToControl),
+		reqToPlan:          defaultMap(reqToPlan),
+		reqToComplypackRef: defaultMap(reqToComplypackRef),
+		controlEvals:       make(map[string]*gemara.ControlEvaluation),
+		controlStepNames:   make(map[string][][]string),
 	}
 }
 
@@ -51,7 +69,7 @@ func (e *Evaluator) AddTarget(assessments []provider.AssessmentLog) {
 		a := &assessments[i]
 		controlID := e.resolveControl(a.RequirementID)
 
-		gemaraAssessment := e.providerToGemaraAssessment(a)
+		gemaraAssessment, stepNames := e.providerToGemaraAssessment(a)
 
 		ce, exists := e.controlEvals[controlID]
 		if !exists {
@@ -68,6 +86,7 @@ func (e *Evaluator) AddTarget(assessments []provider.AssessmentLog) {
 		}
 
 		ce.AssessmentLogs = append(ce.AssessmentLogs, gemaraAssessment)
+		e.controlStepNames[controlID] = append(e.controlStepNames[controlID], stepNames)
 		ce.Result = gemara.UpdateAggregateResult(ce.Result, gemaraAssessment.Result)
 		ce.Message = gemaraAssessment.Message
 	}
@@ -90,9 +109,10 @@ func (e *Evaluator) GemaraLog() *gemara.EvaluationLog {
 		Evaluations: evals,
 		Result:      result,
 		Metadata: gemara.Metadata{
-			Id:          e.policyID,
-			Type:        gemara.EvaluationLogArtifact,
-			Description: "Compliance scan evaluation log",
+			Id:            e.policyID,
+			Type:          gemara.EvaluationLogArtifact,
+			GemaraVersion: gemara.SchemaVersion,
+			Description:   "Compliance scan evaluation log",
 			Author: gemara.Actor{
 				Id:   "complytime",
 				Name: "complytime",
@@ -109,10 +129,13 @@ func (e *Evaluator) GemaraLog() *gemara.EvaluationLog {
 }
 
 // Write serializes the evaluation log as YAML to outDir and returns the path.
+// It uses a shadow struct to replace gemara.AssessmentStep function closures
+// with human-readable step identity strings.
 func (e *Evaluator) Write(outDir string) (string, error) {
 	evalLog := e.GemaraLog()
+	serializable := e.toSerializable(evalLog)
 
-	data, err := yaml.Marshal(evalLog)
+	data, err := yaml.Marshal(serializable)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal evaluation log: %w", err)
 	}
@@ -138,7 +161,7 @@ func (e *Evaluator) resolveControl(requirementID string) string {
 	return requirementID
 }
 
-func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) *gemara.AssessmentLog {
+func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) (*gemara.AssessmentLog, []string) {
 	result := aggregateResultFromSteps(a.Steps)
 
 	msg := a.Message
@@ -156,7 +179,7 @@ func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) *gemar
 		desc = a.RequirementID
 	}
 
-	return &gemara.AssessmentLog{
+	gemaraLog := &gemara.AssessmentLog{
 		Requirement: gemara.EntryMapping{
 			ReferenceId: e.policyID,
 			EntryId:     a.RequirementID,
@@ -165,10 +188,52 @@ func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) *gemar
 		Result:          result,
 		Message:         msg,
 		Applicability:   []string{"default"},
+		Steps:           providerStepsToGemara(a.Steps, a.Confidence),
 		Start:           gemara.Datetime(time.Now().Format(time.RFC3339)),
 		StepsExecuted:   int64(len(a.Steps)),
 		ConfidenceLevel: providerConfidenceToGemara(a.Confidence),
 	}
+
+	// Populate the Plan field when a plan ID mapping exists for this requirement.
+	if planID, ok := e.reqToPlan[a.RequirementID]; ok {
+		gemaraLog.Plan = &gemara.EntryMapping{
+			ReferenceId: e.policyID,
+			EntryId:     planID,
+		}
+	}
+
+	// Collect step names so the shadow struct serialization can produce
+	// human-readable step identity strings instead of function pointer names.
+	names := make([]string, len(a.Steps))
+	for i, s := range a.Steps {
+		names[i] = s.Name
+	}
+
+	return gemaraLog, names
+}
+
+// providerStepToGemara wraps a provider.Step into a gemara.AssessmentStep closure.
+// The closure ignores its payload argument and returns the step's pre-computed
+// result, message, and the assessment-level confidence.
+func providerStepToGemara(step provider.Step, confidence provider.ConfidenceLevel) gemara.AssessmentStep {
+	result := providerResultToGemara(step.Result)
+	conf := providerConfidenceToGemara(confidence)
+	return func(_ interface{}) (gemara.Result, string, gemara.ConfidenceLevel) {
+		return result, step.Message, conf
+	}
+}
+
+// providerStepsToGemara converts a slice of provider steps into gemara AssessmentStep closures.
+// Returns nil when the input slice is empty.
+func providerStepsToGemara(steps []provider.Step, confidence provider.ConfidenceLevel) []gemara.AssessmentStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	gemaraSteps := make([]gemara.AssessmentStep, len(steps))
+	for i, s := range steps {
+		gemaraSteps[i] = providerStepToGemara(s, confidence)
+	}
+	return gemaraSteps
 }
 
 func providerConfidenceToGemara(c provider.ConfidenceLevel) gemara.ConfidenceLevel {
@@ -184,5 +249,103 @@ func providerConfidenceToGemara(c provider.ConfidenceLevel) gemara.ConfidenceLev
 	default:
 		// Unknown provider values map to Undetermined as the most conservative confidence level.
 		return gemara.Undetermined
+	}
+}
+
+// Shadow struct types mirror gemara types but replace Steps []AssessmentStep
+// (function type) with Steps []string (identity strings) for YAML serialization.
+
+type serializableEvaluationLog struct {
+	Metadata    gemara.Metadata                  `yaml:"metadata"`
+	Result      gemara.Result                    `yaml:"result"`
+	Evaluations []*serializableControlEvaluation `yaml:"evaluations"`
+	Target      gemara.Resource                  `yaml:"target"`
+}
+
+type serializableControlEvaluation struct {
+	Name           string                       `yaml:"name"`
+	Result         gemara.Result                `yaml:"result"`
+	Message        string                       `yaml:"message"`
+	Control        gemara.EntryMapping          `yaml:"control"`
+	AssessmentLogs []*serializableAssessmentLog `yaml:"assessment-logs"`
+}
+
+type serializableAssessmentLog struct {
+	Requirement     gemara.EntryMapping    `yaml:"requirement"`
+	Plan            *gemara.EntryMapping   `yaml:"plan,omitempty"`
+	Description     string                 `yaml:"description"`
+	Result          gemara.Result          `yaml:"result"`
+	Message         string                 `yaml:"message"`
+	Applicability   []string               `yaml:"applicability"`
+	Steps           []string               `yaml:"steps"`
+	StepsExecuted   int64                  `yaml:"steps-executed,omitempty"`
+	Start           gemara.Datetime        `yaml:"start"`
+	End             gemara.Datetime        `yaml:"end,omitempty"`
+	Recommendation  string                 `yaml:"recommendation,omitempty"`
+	ConfidenceLevel gemara.ConfidenceLevel `yaml:"confidence-level,omitempty"`
+}
+
+// formatStepIdentity produces a step identity string. When complypackRef is
+// non-empty, the format is "{complypackRef}#{stepName}". Otherwise, the bare
+// stepName is returned.
+func formatStepIdentity(complypackRef, stepName string) string {
+	if complypackRef != "" && stepName != "" {
+		return complypackRef + "#" + stepName
+	}
+	return stepName
+}
+
+// resolveComplypackRef returns the pre-resolved OCI reference for the
+// complypack associated with the given requirement ID.
+func (e *Evaluator) resolveComplypackRef(requirementID string) string {
+	return e.reqToComplypackRef[requirementID]
+}
+
+// toSerializable converts a gemara.EvaluationLog into the shadow struct,
+// replacing AssessmentStep closures with formatted step identity strings.
+func (e *Evaluator) toSerializable(log *gemara.EvaluationLog) *serializableEvaluationLog {
+	sEvals := make([]*serializableControlEvaluation, len(log.Evaluations))
+	for i, ce := range log.Evaluations {
+		controlID := ce.Control.EntryId
+		controlNames := e.controlStepNames[controlID]
+		sLogs := make([]*serializableAssessmentLog, len(ce.AssessmentLogs))
+		for j, al := range ce.AssessmentLogs {
+			complypackRef := e.resolveComplypackRef(al.Requirement.EntryId)
+			var names []string
+			if j < len(controlNames) {
+				names = controlNames[j]
+			}
+			steps := make([]string, len(names))
+			for k, name := range names {
+				steps[k] = formatStepIdentity(complypackRef, name)
+			}
+			sLogs[j] = &serializableAssessmentLog{
+				Requirement:     al.Requirement,
+				Plan:            al.Plan,
+				Description:     al.Description,
+				Result:          al.Result,
+				Message:         al.Message,
+				Applicability:   al.Applicability,
+				Steps:           steps,
+				StepsExecuted:   al.StepsExecuted,
+				Start:           al.Start,
+				End:             al.End,
+				Recommendation:  al.Recommendation,
+				ConfidenceLevel: al.ConfidenceLevel,
+			}
+		}
+		sEvals[i] = &serializableControlEvaluation{
+			Name:           ce.Name,
+			Result:         ce.Result,
+			Message:        ce.Message,
+			Control:        ce.Control,
+			AssessmentLogs: sLogs,
+		}
+	}
+	return &serializableEvaluationLog{
+		Metadata:    log.Metadata,
+		Result:      log.Result,
+		Evaluations: sEvals,
+		Target:      log.Target,
 	}
 }
