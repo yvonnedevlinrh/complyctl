@@ -33,7 +33,8 @@ message GenerateRequest {
   // Workspace-scoped config (e.g., scan output directory)
   map<string, string> global_variables = 1;
 
-  // Per-requirement test configuration (test variables from policy assessment plan)
+  // Per-requirement test configuration
+  // (test variables from policy assessment plan)
   repeated AssessmentConfiguration configurations = 2;
 }
 
@@ -71,7 +72,8 @@ message Target {
   // Target identifier
   string target_id = 1;
 
-  // Target variables — per-target runtime config (credentials, profile, kubeconfig)
+  // Target variables — per-target runtime config
+  // (credentials, profile, kubeconfig)
   map<string, string> variables = 2;
 }
 
