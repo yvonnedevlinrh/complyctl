@@ -55,6 +55,12 @@
   policy digests. Previously, updating a complypack without changing the
   policy would skip regeneration, causing providers to use stale
   artifacts (#583).
+- OCI reference parsing now supports standard `:tag` syntax (e.g.,
+  `registry.com/org/image:v0.4.0`) in addition to the existing `@version`
+  notation for both policies and complypacks. Digest references
+  (`@sha256:...`) are also supported. Invalid OCI references in
+  `complytime.yaml` are now detected at config load time with clear
+  error messages. (#594)
 - Scan reports now resolve assessment plan IDs to requirement IDs,
   ensuring output displays meaningful identifiers instead of internal
   plan references. Affects EvaluationLog, OSCAL, SARIF, and Markdown
