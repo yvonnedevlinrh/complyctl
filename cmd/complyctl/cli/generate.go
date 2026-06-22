@@ -165,7 +165,8 @@ func saveGenerationAndPrint(cacheDir, baseDir, repository, eid string, evaluator
 		return fmt.Errorf("failed to load cache state: %w", err)
 	}
 	policyState, _ := cacheState.GetPolicyState(repository)
-	genState := policy.NewGenerationState(repository, policyState.Digest, evaluatorIDs)
+	cpDigests := complypackDigestsByEvaluator(cacheState)
+	genState := policy.NewGenerationState(repository, policyState.Digest, evaluatorIDs, cpDigests)
 	if err := policy.SaveGenerationState(baseDir, repository, genState); err != nil {
 		return fmt.Errorf("failed to save generation state: %w", err)
 	}

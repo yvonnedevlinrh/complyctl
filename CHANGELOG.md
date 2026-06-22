@@ -51,6 +51,10 @@
 
 ### Fixed
 
+- Generation freshness detection now tracks complypack digests alongside
+  policy digests. Previously, updating a complypack without changing the
+  policy would skip regeneration, causing providers to use stale
+  artifacts (#583).
 - Scan reports now resolve assessment plan IDs to requirement IDs,
   ensuring output displays meaningful identifiers instead of internal
   plan references. Affects EvaluationLog, OSCAL, SARIF, and Markdown

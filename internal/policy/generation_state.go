@@ -5,6 +5,7 @@ package policy
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,10 +18,11 @@ import (
 // {workspace}/{WorkspaceDir}/generation/{policy-id}.json
 // See R37: specs/001-gemara-native-workflow/research.md
 type GenerationState struct {
-	PolicyID     string   `json:"policy_id"`
-	PolicyDigest string   `json:"policy_digest"`
-	GeneratedAt  string   `json:"generated_at"`
-	EvaluatorIDs []string `json:"evaluator_ids"`
+	PolicyID          string            `json:"policy_id"`
+	PolicyDigest      string            `json:"policy_digest"`
+	ComplypackDigests map[string]string `json:"complypack_digests,omitempty"`
+	GeneratedAt       string            `json:"generated_at"`
+	EvaluatorIDs      []string          `json:"evaluator_ids"`
 }
 
 // SaveGenerationState persists a GenerationState to the generation directory.
@@ -64,17 +66,29 @@ func LoadGenerationState(baseDir, policyID string) (*GenerationState, error) {
 	return &state, nil
 }
 
-// IsFresh returns true when the persisted digest matches the current cache digest.
-func (s *GenerationState) IsFresh(currentDigest string) bool {
-	return s.PolicyDigest == currentDigest
+// IsFresh returns true when the persisted policy digest and complypack digests
+// both match their current values from the cache.
+func (s *GenerationState) IsFresh(currentDigest string, currentComplypackDigests map[string]string) bool {
+	if s.PolicyDigest != currentDigest {
+		return false
+	}
+	return maps.Equal(normalizeNilMap(s.ComplypackDigests), normalizeNilMap(currentComplypackDigests))
+}
+
+func normalizeNilMap(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
 }
 
 // NewGenerationState creates a GenerationState with the current timestamp.
-func NewGenerationState(policyID, digest string, evaluatorIDs []string) *GenerationState {
+func NewGenerationState(policyID, digest string, evaluatorIDs []string, complypackDigests map[string]string) *GenerationState {
 	return &GenerationState{
-		PolicyID:     policyID,
-		PolicyDigest: digest,
-		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
-		EvaluatorIDs: evaluatorIDs,
+		PolicyID:          policyID,
+		PolicyDigest:      digest,
+		ComplypackDigests: complypackDigests,
+		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
+		EvaluatorIDs:      evaluatorIDs,
 	}
 }

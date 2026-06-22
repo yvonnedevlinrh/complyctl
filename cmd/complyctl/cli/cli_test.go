@@ -1093,7 +1093,7 @@ func TestEvaluatorArtifactsExist_PathIsFile(t *testing.T) {
 // --- needsRegeneration tests ---
 
 func TestNeedsRegeneration_NilState(t *testing.T) {
-	assert.True(t, needsRegeneration(".", nil, "sha256:abc", "test-policy"),
+	assert.True(t, needsRegeneration(".", nil, "sha256:abc", nil, "test-policy"),
 		"nil generation state should require regeneration")
 }
 
@@ -1102,7 +1102,7 @@ func TestNeedsRegeneration_StaleDigest(t *testing.T) {
 		PolicyDigest: "sha256:old",
 		EvaluatorIDs: []string{"ampel"},
 	}
-	assert.True(t, needsRegeneration(".", state, "sha256:new", "test-policy"),
+	assert.True(t, needsRegeneration(".", state, "sha256:new", nil, "test-policy"),
 		"mismatched digest should require regeneration")
 }
 
@@ -1116,7 +1116,7 @@ func TestNeedsRegeneration_FreshWithArtifacts(t *testing.T) {
 		PolicyDigest: "sha256:current",
 		EvaluatorIDs: []string{"ampel"},
 	}
-	assert.False(t, needsRegeneration(baseDir, state, "sha256:current", "test-policy"),
+	assert.False(t, needsRegeneration(baseDir, state, "sha256:current", nil, "test-policy"),
 		"fresh digest with existing artifacts should not require regeneration")
 }
 
@@ -1127,8 +1127,57 @@ func TestNeedsRegeneration_FreshButArtifactsMissing(t *testing.T) {
 		PolicyDigest: "sha256:current",
 		EvaluatorIDs: []string{"ampel"},
 	}
-	assert.True(t, needsRegeneration(baseDir, state, "sha256:current", "test-policy"),
+	assert.True(t, needsRegeneration(baseDir, state, "sha256:current", nil, "test-policy"),
 		"fresh digest but missing artifacts should require regeneration")
+}
+
+func TestNeedsRegeneration_ComplypackDigestChanged(t *testing.T) {
+	baseDir := t.TempDir()
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "ampel")
+	require.NoError(t, os.MkdirAll(evalDir, 0750))
+	require.NoError(t, os.WriteFile(filepath.Join(evalDir, "policy.rego"), []byte("package test"), 0600))
+
+	state := &policy.GenerationState{
+		PolicyDigest:      "sha256:current",
+		ComplypackDigests: map[string]string{"opa": "sha256:old-cp"},
+		EvaluatorIDs:      []string{"ampel"},
+	}
+	assert.True(t, needsRegeneration(baseDir, state, "sha256:current",
+		map[string]string{"opa": "sha256:new-cp"}, "test-policy"),
+		"changed complypack digest should require regeneration")
+}
+
+func TestComplypackDigestsByEvaluator_Empty(t *testing.T) {
+	state := &cache.State{
+		Complypacks: make(map[string]cache.PolicyState),
+	}
+	result := complypackDigestsByEvaluator(state)
+	assert.Empty(t, result)
+}
+
+func TestComplypackDigestsByEvaluator_SkipsIncomplete(t *testing.T) {
+	state := &cache.State{
+		Complypacks: map[string]cache.PolicyState{
+			"repo/missing-digest":    {EvaluatorID: "opa", Digest: ""},
+			"repo/missing-evaluator": {EvaluatorID: "", Digest: "sha256:abc"},
+		},
+	}
+	result := complypackDigestsByEvaluator(state)
+	assert.Empty(t, result)
+}
+
+func TestComplypackDigestsByEvaluator_ExtractsDigests(t *testing.T) {
+	state := &cache.State{
+		Complypacks: map[string]cache.PolicyState{
+			"example.com/cp/opa":   {EvaluatorID: "io.complytime.opa", Digest: "sha256:aaa"},
+			"example.com/cp/ampel": {EvaluatorID: "io.complytime.ampel", Digest: "sha256:bbb"},
+		},
+	}
+	result := complypackDigestsByEvaluator(state)
+	assert.Equal(t, map[string]string{
+		"io.complytime.opa":   "sha256:aaa",
+		"io.complytime.ampel": "sha256:bbb",
+	}, result)
 }
 
 // --- lazyLogWriter tests ---

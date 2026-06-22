@@ -362,7 +362,7 @@ func targetIDList(targets []complytime.TargetConfig) []string {
 }
 
 func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, configVars map[string]string, repository, eid string, evaluatorIDs []string) error {
-	needsGenerate, policyDigest, err := checkGenerationFreshness(cacheDir, baseDir, repository, eid)
+	needsGenerate, policyDigest, cpDigests, err := checkGenerationFreshness(cacheDir, baseDir, repository, eid)
 	if err != nil {
 		return err
 	}
@@ -370,7 +370,7 @@ func ensureGenerated(ctx context.Context, cacheDir, baseDir string, mgr *provide
 		return nil
 	}
 	globalVars := complytime.WithWorkspaceVar(configVars, baseDir)
-	return runGeneration(ctx, cacheDir, baseDir, mgr, groups, policyTargets, globalVars, repository, policyDigest, evaluatorIDs)
+	return runGeneration(ctx, cacheDir, baseDir, mgr, groups, policyTargets, globalVars, repository, policyDigest, evaluatorIDs, cpDigests)
 }
 
 // runScanAndReport executes the scan across all targets and processes the
@@ -473,35 +473,46 @@ func filterTargetsForPolicy(targets []complytime.TargetConfig, policyID string) 
 	return result
 }
 
-func checkGenerationFreshness(cacheDir, baseDir, repository, eid string) (needsGenerate bool, digest string, err error) {
+func checkGenerationFreshness(cacheDir, baseDir, repository, eid string) (needsGenerate bool, digest string, complypackDigests map[string]string, err error) {
 	cacheState, err := cache.LoadState(cacheDir)
 	if err != nil {
-		return false, "", fmt.Errorf("failed to load cache state: %w", err)
+		return false, "", nil, fmt.Errorf("failed to load cache state: %w", err)
 	}
 	policyState, _ := cacheState.GetPolicyState(repository)
+	cpDigests := complypackDigestsByEvaluator(cacheState)
 
 	genState, err := policy.LoadGenerationState(baseDir, repository)
 	if err != nil {
-		return false, "", fmt.Errorf("failed to load generation state: %w", err)
+		return false, "", nil, fmt.Errorf("failed to load generation state: %w", err)
 	}
 
-	return needsRegeneration(baseDir, genState, policyState.Digest, eid), policyState.Digest, nil
+	return needsRegeneration(baseDir, genState, policyState.Digest, cpDigests, eid), policyState.Digest, cpDigests, nil
 }
 
-func needsRegeneration(baseDir string, genState *policy.GenerationState, digest, eid string) bool {
+func complypackDigestsByEvaluator(cacheState *cache.State) map[string]string {
+	m := make(map[string]string)
+	for _, ps := range cacheState.Complypacks {
+		if ps.EvaluatorID != "" && ps.Digest != "" {
+			m[ps.EvaluatorID] = ps.Digest
+		}
+	}
+	return m
+}
+
+func needsRegeneration(baseDir string, genState *policy.GenerationState, digest string, complypackDigests map[string]string, eid string) bool {
 	if genState == nil {
 		fmt.Fprintf(os.Stderr, "No prior generation found — generating artifacts for %s\n", eid)
 		return true
 	}
-	if !genState.IsFresh(digest) {
-		fmt.Fprintf(os.Stderr, "Policy %s updated since last generate — regenerating\n", eid)
+	if !genState.IsFresh(digest, complypackDigests) {
+		fmt.Fprintf(os.Stderr, "Policy or complypack updated for %s since last generate — regenerating\n", eid)
 		return true
 	}
 	if !evaluatorArtifactsExist(baseDir, genState.EvaluatorIDs) {
 		fmt.Fprintf(os.Stderr, "Generated artifacts missing on disk for %s — regenerating\n", eid)
 		return true
 	}
-	fmt.Fprintf(os.Stderr, "Reusing generated artifacts for %s (policy unchanged)\n", eid)
+	fmt.Fprintf(os.Stderr, "Reusing generated artifacts for %s (unchanged since last generate)\n", eid)
 	return false
 }
 
@@ -520,7 +531,7 @@ func evaluatorArtifactsExist(baseDir string, evaluatorIDs []string) bool {
 	return true
 }
 
-func runGeneration(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, policyDigest string, evaluatorIDs []string) error {
+func runGeneration(ctx context.Context, cacheDir, baseDir string, mgr *provider.Manager, groups map[string]policy.EvaluatorGroup, policyTargets []complytime.TargetConfig, globalVars map[string]string, repository, policyDigest string, evaluatorIDs []string, complypackDigests map[string]string) error {
 	genSpin := terminal.NewSpinner("Generating policy artifacts...")
 	genSpin.Start()
 	defer genSpin.Stop()
@@ -529,7 +540,7 @@ func runGeneration(ctx context.Context, cacheDir, baseDir string, mgr *provider.
 		return err
 	}
 
-	newGenState := policy.NewGenerationState(repository, policyDigest, evaluatorIDs)
+	newGenState := policy.NewGenerationState(repository, policyDigest, evaluatorIDs, complypackDigests)
 	if err := policy.SaveGenerationState(baseDir, repository, newGenState); err != nil {
 		return fmt.Errorf("failed to save generation state: %w", err)
 	}
