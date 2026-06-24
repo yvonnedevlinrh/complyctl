@@ -3,10 +3,12 @@
 package output
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gemaraproj/go-gemara"
 	"github.com/goccy/go-yaml"
@@ -198,6 +200,21 @@ func (e *Evaluator) providerToGemaraAssessment(a *provider.AssessmentLog) (*gema
 		Start:           gemara.Datetime(time.Now().Format(time.RFC3339)),
 		StepsExecuted:   int64(len(a.Steps)),
 		ConfidenceLevel: providerConfidenceToGemara(a.Confidence),
+		Recommendation:  a.Recommendation,
+	}
+
+	if len(a.Evidence) > 0 {
+		gemaraEvidence := make([]gemara.Evidence, len(a.Evidence))
+		for i, ev := range a.Evidence {
+			gemaraEvidence[i] = gemara.Evidence{
+				Id:          ev.ID,
+				Type:        gemara.EvidenceType(ev.Type),
+				Description: ev.Description,
+				Payload:     payloadToString(ev.Payload),
+				CollectedAt: gemara.Datetime(ev.CollectedAt),
+			}
+		}
+		gemaraLog.Evidence = gemaraEvidence
 	}
 
 	// Populate the Plan field when a plan ID mapping exists for this requirement.
@@ -258,6 +275,16 @@ func providerConfidenceToGemara(c provider.ConfidenceLevel) gemara.ConfidenceLev
 	}
 }
 
+func payloadToString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if utf8.Valid(b) {
+		return string(b)
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 // Shadow struct types mirror gemara types but replace Steps []AssessmentStep
 // (function type) with Steps []string (identity strings) for YAML serialization.
 
@@ -289,6 +316,7 @@ type serializableAssessmentLog struct {
 	End             gemara.Datetime        `yaml:"end,omitempty"`
 	Recommendation  string                 `yaml:"recommendation,omitempty"`
 	ConfidenceLevel gemara.ConfidenceLevel `yaml:"confidence-level,omitempty"`
+	Evidence        []gemara.Evidence      `yaml:"evidence,omitempty"`
 }
 
 // formatStepIdentity produces a step identity string. When complypackRef is
@@ -338,6 +366,7 @@ func (e *Evaluator) toSerializable(log *gemara.EvaluationLog) *serializableEvalu
 				End:             al.End,
 				Recommendation:  al.Recommendation,
 				ConfidenceLevel: al.ConfidenceLevel,
+				Evidence:        al.Evidence,
 			}
 		}
 		sEvals[i] = &serializableControlEvaluation{

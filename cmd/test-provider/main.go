@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 
@@ -78,6 +79,16 @@ func (t *testEvaluator) Scan(_ context.Context, req *provider.ScanRequest) (*pro
 			},
 			Message:    "all checks passed",
 			Confidence: provider.ConfidenceLevelHigh,
+			Evidence: []provider.Evidence{
+				{
+					ID:          "ev-" + reqID,
+					Type:        "log",
+					Description: "test evidence for " + reqID,
+					Payload:     []byte("sample payload"),
+					CollectedAt: time.Now().Format(time.RFC3339),
+				},
+			},
+			Recommendation: "No action needed",
 		})
 	}
 	return &provider.ScanResponse{Assessments: assessments}, nil

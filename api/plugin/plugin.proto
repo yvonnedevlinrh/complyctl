@@ -129,6 +129,12 @@ message AssessmentLog {
 
   // Confidence in assessment result (mirrors go-gemara ConfidenceLevel)
   ConfidenceLevel confidence = 4;
+
+  // Evidence collected during assessment (mirrors go-gemara Evidence)
+  repeated Evidence evidence = 5;
+
+  // Remediation guidance for non-passing assessments
+  string recommendation = 6;
 }
 
 // Step represents a single step in the assessment process
@@ -141,6 +147,26 @@ message Step {
 
   // Step result message
   string message = 3;
+}
+
+// Evidence records a piece of data collected during assessment.
+// Mirrors go-gemara Evidence with minimal fields; extensible for
+// ADR 0023 EvidenceMapping origin fields in a future revision.
+message Evidence {
+  // Unique identifier for this evidence entry
+  string id = 1;
+
+  // Categorizes the kind of evidence (e.g. "config-file", "api-response")
+  string type = 2;
+
+  // Explains what this evidence represents
+  string description = 3;
+
+  // Raw evidence data collected
+  bytes payload = 4;
+
+  // Timestamp when the evidence was gathered (RFC 3339)
+  string collected_at = 5;
 }
 
 // ConfidenceLevel indicates the evaluator's confidence in an assessment result.

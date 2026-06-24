@@ -245,6 +245,109 @@ func TestEvaluator_Write_StepIdentityWithoutComplypack(t *testing.T) {
 	assert.NotContains(t, content, "providerStepToGemara")
 }
 
+func TestGemaraLog_EvidencePopulated(t *testing.T) {
+	eval := output.NewEvaluator("pol", "tgt", nil, nil, nil)
+	eval.AddTarget([]provider.AssessmentLog{
+		{
+			RequirementID: "req-1",
+			Steps:         []provider.Step{{Result: provider.ResultFailed, Message: "bad"}},
+			Evidence: []provider.Evidence{
+				{
+					ID:          "ev-1",
+					Type:        "config-file",
+					Description: "TLS config snippet",
+					Payload:     []byte(`{"tls": "1.0"}`),
+					CollectedAt: "2026-06-23T14:00:00Z",
+				},
+			},
+			Recommendation: "Upgrade to TLS 1.2",
+		},
+	})
+
+	log := eval.GemaraLog()
+	require.Len(t, log.Evaluations, 1)
+	require.Len(t, log.Evaluations[0].AssessmentLogs, 1)
+	al := log.Evaluations[0].AssessmentLogs[0]
+	require.Len(t, al.Evidence, 1)
+	assert.Equal(t, "ev-1", al.Evidence[0].Id)
+	assert.Equal(t, gemara.EvidenceType("config-file"), al.Evidence[0].Type)
+	assert.Equal(t, "TLS config snippet", al.Evidence[0].Description)
+	assert.Equal(t, `{"tls": "1.0"}`, al.Evidence[0].Payload)
+	assert.Equal(t, gemara.Datetime("2026-06-23T14:00:00Z"), al.Evidence[0].CollectedAt)
+	assert.Equal(t, "Upgrade to TLS 1.2", al.Recommendation)
+}
+
+func TestGemaraLog_EvidenceEmptyWhenNotProvided(t *testing.T) {
+	eval := output.NewEvaluator("pol", "tgt", nil, nil, nil)
+	eval.AddTarget([]provider.AssessmentLog{
+		{RequirementID: "req-1", Steps: []provider.Step{{Result: provider.ResultPassed, Message: "ok"}}},
+	})
+
+	log := eval.GemaraLog()
+	require.Len(t, log.Evaluations, 1)
+	require.Len(t, log.Evaluations[0].AssessmentLogs, 1)
+	assert.Empty(t, log.Evaluations[0].AssessmentLogs[0].Evidence)
+	assert.Empty(t, log.Evaluations[0].AssessmentLogs[0].Recommendation)
+}
+
+func TestEvaluator_Write_EvidenceSerialized(t *testing.T) {
+	outDir := t.TempDir()
+	eval := output.NewEvaluator("pol", "tgt", nil, nil, nil)
+	eval.AddTarget([]provider.AssessmentLog{
+		{
+			RequirementID: "req-1",
+			Steps:         []provider.Step{{Result: provider.ResultFailed, Message: "bad"}},
+			Evidence: []provider.Evidence{
+				{
+					ID:          "ev-1",
+					Type:        "config-file",
+					Description: "TLS config",
+					Payload:     []byte("sample"),
+					CollectedAt: "2026-06-23T14:00:00Z",
+				},
+			},
+			Recommendation: "Fix TLS",
+		},
+	})
+
+	path, err := eval.Write(outDir)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "evidence:")
+	assert.Contains(t, content, "id: ev-1")
+	assert.Contains(t, content, "type: config-file")
+	assert.Contains(t, content, "description: TLS config")
+	assert.Contains(t, content, "recommendation: Fix TLS")
+}
+
+func TestGemaraLog_EvidenceBinaryPayloadBase64(t *testing.T) {
+	eval := output.NewEvaluator("pol", "tgt", nil, nil, nil)
+	eval.AddTarget([]provider.AssessmentLog{
+		{
+			RequirementID: "req-1",
+			Steps:         []provider.Step{{Result: provider.ResultFailed, Message: "bad"}},
+			Evidence: []provider.Evidence{
+				{
+					ID:      "ev-bin",
+					Type:    "binary",
+					Payload: []byte{0xff, 0xfe, 0x00, 0x01},
+				},
+			},
+		},
+	})
+
+	log := eval.GemaraLog()
+	require.Len(t, log.Evaluations, 1)
+	require.Len(t, log.Evaluations[0].AssessmentLogs, 1)
+	al := log.Evaluations[0].AssessmentLogs[0]
+	require.Len(t, al.Evidence, 1)
+	assert.Equal(t, "//4AAQ==", al.Evidence[0].Payload,
+		"binary payload should be base64-encoded")
+}
+
 func TestEvaluator_Write_StepIdentityEmptyName(t *testing.T) {
 	outDir := t.TempDir()
 	eval := output.NewEvaluator("pol", "tgt", nil, nil, nil)

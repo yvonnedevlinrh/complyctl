@@ -66,10 +66,12 @@ type ScanResponse struct {
 
 // AssessmentLog holds the evaluation result for a single requirement.
 type AssessmentLog struct {
-	RequirementID string
-	Steps         []Step
-	Message       string
-	Confidence    ConfidenceLevel
+	RequirementID  string
+	Steps          []Step
+	Message        string
+	Confidence     ConfidenceLevel
+	Evidence       []Evidence
+	Recommendation string
 }
 
 // Step is one discrete check within an assessment.
@@ -77,6 +79,15 @@ type Step struct {
 	Name    string
 	Result  Result
 	Message string
+}
+
+// Evidence records a piece of data collected during assessment.
+type Evidence struct {
+	ID          string
+	Type        string
+	Description string
+	Payload     []byte
+	CollectedAt string
 }
 
 // Result is the outcome of a single assessment step.
@@ -220,10 +231,12 @@ func (c *Client) Scan(ctx context.Context, req *ScanRequest) (*ScanResponse, err
 			})
 		}
 		assessments = append(assessments, AssessmentLog{
-			RequirementID: pa.GetRequirementId(),
-			Steps:         steps,
-			Message:       pa.GetMessage(),
-			Confidence:    protoConfidenceToInternal(pa.GetConfidence()),
+			RequirementID:  pa.GetRequirementId(),
+			Steps:          steps,
+			Message:        pa.GetMessage(),
+			Confidence:     protoConfidenceToInternal(pa.GetConfidence()),
+			Evidence:       protoEvidenceToInternal(pa.GetEvidence()),
+			Recommendation: pa.GetRecommendation(),
 		})
 	}
 
@@ -250,6 +263,23 @@ func (c *Client) Export(ctx context.Context, req *ExportRequest) (*ExportRespons
 		FailedCount:   protoResp.GetFailedCount(),
 		ErrorMessage:  protoResp.GetErrorMessage(),
 	}, nil
+}
+
+func protoEvidenceToInternal(pe []*pluginv2.Evidence) []Evidence {
+	if len(pe) == 0 {
+		return nil
+	}
+	evidence := make([]Evidence, len(pe))
+	for i, e := range pe {
+		evidence[i] = Evidence{
+			ID:          e.GetId(),
+			Type:        e.GetType(),
+			Description: e.GetDescription(),
+			Payload:     e.GetPayload(),
+			CollectedAt: e.GetCollectedAt(),
+		}
+	}
+	return evidence
 }
 
 func protoResultToInternal(r pluginv2.Result) Result {

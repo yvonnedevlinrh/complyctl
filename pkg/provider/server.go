@@ -85,10 +85,12 @@ func (s *grpcServer) Scan(ctx context.Context, req *proto.ScanRequest) (*proto.S
 			})
 		}
 		protoAssessments = append(protoAssessments, &proto.AssessmentLog{
-			RequirementId: a.RequirementID,
-			Steps:         protoSteps,
-			Message:       a.Message,
-			Confidence:    internalConfidenceToProto(a.Confidence),
+			RequirementId:  a.RequirementID,
+			Steps:          protoSteps,
+			Message:        a.Message,
+			Confidence:     internalConfidenceToProto(a.Confidence),
+			Evidence:       internalEvidenceToProto(a.Evidence),
+			Recommendation: a.Recommendation,
 		})
 	}
 
@@ -128,6 +130,23 @@ func (s *grpcServer) Export(ctx context.Context, req *proto.ExportRequest) (*pro
 		FailedCount:   resp.FailedCount,
 		ErrorMessage:  resp.ErrorMessage,
 	}, nil
+}
+
+func internalEvidenceToProto(evidence []Evidence) []*proto.Evidence {
+	if len(evidence) == 0 {
+		return nil
+	}
+	pe := make([]*proto.Evidence, len(evidence))
+	for i, ev := range evidence {
+		pe[i] = &proto.Evidence{
+			Id:          ev.ID,
+			Type:        ev.Type,
+			Description: ev.Description,
+			Payload:     ev.Payload,
+			CollectedAt: ev.CollectedAt,
+		}
+	}
+	return pe
 }
 
 func internalResultToProto(r Result) proto.Result {
