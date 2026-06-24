@@ -10,6 +10,14 @@
 
 ### Added
 
+- Redesigned markdown report (`--format pretty`) with summary metadata
+  table, pass rate, grouped controls table with messages, findings
+  section grouped by result type with recommendation and collapsible
+  evidence, and evaluation log wrapped in collapsible `<details>` (#572)
+- `Evidence` and `Recommendation` fields added to provider gRPC API
+  (`AssessmentLog` proto message). Providers can now return evidence
+  collected during assessment and remediation guidance for non-passing
+  results. Fields are optional and backward compatible (#572)
 - Workspace configuration: `--workspace` / `-w` flag and `COMPLYTIME_WORKSPACE` environment variable for running commands from any directory (#433)
 - Config file location: `complytime.yaml` moved to `.complytime/complytime.yaml` with backward compatibility (#527)
 - Deprecation warning for legacy config file location at repository root
