@@ -113,7 +113,7 @@ func TestCheckPolicyVersions_NoPolicies(t *testing.T) {
 
 func TestCheckPolicyVersions_NilResolver(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	results := CheckPolicyVersions(cfg, "/tmp", nil)
 	if results != nil {
@@ -133,7 +133,7 @@ func TestCheckPolicyVersions_PolicyAtLatest(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 	}
 
@@ -195,7 +195,7 @@ func TestCheckPolicyVersions_PinnedMatchesCached_LatestDiffers(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 	}
 
@@ -263,7 +263,7 @@ func TestCheckPolicyVersions_PinnedMismatchCached(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v2.0.0"},
+			{URL: "reg.io/policies/nist:v2.0.0"},
 		},
 	}
 
@@ -295,7 +295,7 @@ func TestCheckPolicyVersions_NotCached(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 	}
 
@@ -326,8 +326,8 @@ func TestCheckPolicyVersions_RegistryUnreachable(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "unreachable.io/policies/nist@v1.0.0"},
-			{URL: "unreachable.io/policies/cis@v2.0.0", ID: "cis"},
+			{URL: "unreachable.io/policies/nist:v1.0.0"},
+			{URL: "unreachable.io/policies/cis:v2.0.0", ID: "cis"},
 		},
 	}
 
@@ -367,7 +367,7 @@ func TestCheckPolicyVersions_LatestMissing_PinnedResolves(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 	}
 
@@ -472,7 +472,7 @@ func TestCheckPolicyVersions_PinnedBoth404(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v2.0.0"},
+			{URL: "reg.io/policies/nist:v2.0.0"},
 		},
 	}
 
@@ -542,8 +542,8 @@ func TestCheckPolicyVersions_PinnedNetworkFailure_BothFail(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "flaky.io/policies/nist@v1.0.0"},
-			{URL: "flaky.io/policies/cis@v1.0.0", ID: "cis"},
+			{URL: "flaky.io/policies/nist:v1.0.0"},
+			{URL: "flaky.io/policies/cis:v1.0.0", ID: "cis"},
 		},
 	}
 
@@ -569,7 +569,7 @@ func TestCheckPolicyVersions_BadCacheState(t *testing.T) {
 	}
 
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 
 	results := CheckPolicyVersions(cfg, tmpDir, newMockVersionResolver())
@@ -712,7 +712,7 @@ func TestCheckVariables_NoVerbose_NoDetail(t *testing.T) {
 func TestCheckVariables_UnmappedTargetVars_NilResolver(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{"output_dir": "/tmp"},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets:   []complytime.TargetConfig{{ID: "host1", Policies: []string{"nist"}}},
 	}
 	health := []ProviderHealth{{
@@ -739,7 +739,7 @@ func TestCheckVariables_UnmappedTargetVars_NilResolver(t *testing.T) {
 func TestCheckVariables_UnmappedTargetVars_ResolverFails(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "host1",
 			Policies: []string{"nist"},
@@ -785,7 +785,7 @@ func TestCheckVariables_UnmappedTargetVars_ResolverFails(t *testing.T) {
 func TestCheckVariables_UnmappedTargetVars_EvaluatorNotInGraph(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "host1",
 			Policies: []string{"nist"},
@@ -818,7 +818,7 @@ func TestCheckVariables_UnmappedTargetVars_EvaluatorNotInGraph(t *testing.T) {
 func TestCheckVariables_MappedTargetVars_MissingProfile(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:        "host1",
 			Policies:  []string{"nist"},
@@ -852,7 +852,7 @@ func TestCheckVariables_MappedTargetVars_MissingProfile(t *testing.T) {
 func TestCheckVariables_Verbose_UnmappedTargetVars(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "host1",
 			Policies: []string{"nist"},
@@ -932,7 +932,7 @@ func TestCheckVariables_WorkspaceAutoInjected_Verbose(t *testing.T) {
 func TestCheckVariables_ResolveFailure_PolicyNotFound(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "host1",
 			Policies: []string{"nonexistent-policy"},
@@ -989,7 +989,7 @@ func TestCheckVariables_ResolveFailure_InvalidRef(t *testing.T) {
 func TestCheckVariables_ResolveFailure_VersionNotFound(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "host1",
 			Policies: []string{"nist"},
@@ -1018,7 +1018,7 @@ func TestCheckVariables_ResolveFailure_VersionNotFound(t *testing.T) {
 func TestCheckVariables_ResolveFailure_GraphNotFound(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Variables: map[string]string{},
-		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies:  []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "host1",
 			Policies: []string{"nist"},
@@ -1057,7 +1057,7 @@ func TestCheckPolicyActivePeriod_NilConfig(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_NilResolver(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	results := CheckPolicyActivePeriod(cfg, nil, false)
 	if results != nil {
@@ -1067,7 +1067,7 @@ func TestCheckPolicyActivePeriod_NilResolver(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_NoTimeline(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1090,7 +1090,7 @@ func TestCheckPolicyActivePeriod_NoTimeline(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_Active(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1116,7 +1116,7 @@ func TestCheckPolicyActivePeriod_Active(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_NotYetActive(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1142,7 +1142,7 @@ func TestCheckPolicyActivePeriod_NotYetActive(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_Expired(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1168,7 +1168,7 @@ func TestCheckPolicyActivePeriod_Expired(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_OpenEnded(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1193,7 +1193,7 @@ func TestCheckPolicyActivePeriod_OpenEnded(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_Verbose_ShowsEnforcement(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1248,7 +1248,7 @@ func TestCheckPolicyActivePeriod_Verbose_ShowsEnforcement(t *testing.T) {
 
 func TestCheckPolicyActivePeriod_UnparseableDate(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist@v1.0.0"}},
+		Policies: []complytime.PolicyEntry{{URL: "reg.io/policies/nist:v1.0.0"}},
 	}
 	resolver := newMockPolicyGraphResolver()
 	resolver.versions["policies/nist@v1.0.0"] = "v1.0.0"
@@ -1573,10 +1573,10 @@ func TestCheckComplypacks_AllPresent(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 		Complypacks: []complytime.PolicyEntry{
-			{URL: "reg.io/complypacks/openscap@v1.0.0"},
+			{URL: "reg.io/complypacks/openscap:v1.0.0"},
 		},
 	}
 
@@ -1604,10 +1604,10 @@ func TestCheckComplypacks_Missing(t *testing.T) {
 
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 		Complypacks: []complytime.PolicyEntry{
-			{URL: "reg.io/complypacks/openscap@v1.0.0"},
+			{URL: "reg.io/complypacks/openscap:v1.0.0"},
 		},
 	}
 
@@ -1644,7 +1644,7 @@ func TestCheckComplypacks_NilConfig(t *testing.T) {
 func TestCheckComplypacks_NoComplypacks(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "reg.io/policies/nist@v1.0.0"},
+			{URL: "reg.io/policies/nist:v1.0.0"},
 		},
 		// Complypacks is nil/empty — check should be skipped.
 	}
@@ -1662,7 +1662,7 @@ func TestCheckComplypacks_InvalidPolicyRef(t *testing.T) {
 			{URL: ""},
 		},
 		Complypacks: []complytime.PolicyEntry{
-			{URL: "reg.io/complypacks/openscap@v1.0.0"},
+			{URL: "reg.io/complypacks/openscap:v1.0.0"},
 		},
 	}
 

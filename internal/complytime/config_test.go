@@ -15,7 +15,7 @@ import (
 )
 
 func TestParsePolicyRef_FullReference(t *testing.T) {
-	ref, err := complytime.ParsePolicyRef("registry.com/policies/nist-800-53-r5@v1.2.3")
+	ref, err := complytime.ParsePolicyRef("registry.com/policies/nist-800-53-r5:v1.2.3")
 	require.NoError(t, err)
 	assert.Equal(t, "registry.com", ref.Registry)
 	assert.Equal(t, "policies/nist-800-53-r5", ref.Repository)
@@ -33,7 +33,7 @@ func TestParsePolicyRef_NoVersion(t *testing.T) {
 }
 
 func TestParsePolicyRef_WithHTTPScheme(t *testing.T) {
-	ref, err := complytime.ParsePolicyRef("http://localhost:5000/policies/test@v1.0")
+	ref, err := complytime.ParsePolicyRef("http://localhost:5000/policies/test:v1.0")
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:5000", ref.Registry)
 	assert.Equal(t, "policies/test", ref.Repository)
@@ -42,7 +42,7 @@ func TestParsePolicyRef_WithHTTPScheme(t *testing.T) {
 }
 
 func TestParsePolicyRef_WithHTTPSScheme(t *testing.T) {
-	ref, err := complytime.ParsePolicyRef("https://ghcr.io/org/policy@latest")
+	ref, err := complytime.ParsePolicyRef("https://ghcr.io/org/policy:latest")
 	require.NoError(t, err)
 	assert.Equal(t, "https://ghcr.io", ref.Registry)
 	assert.Equal(t, "org/policy", ref.Repository)
@@ -79,7 +79,7 @@ func TestParsePolicyRef_BareIDWithDigest(t *testing.T) {
 }
 
 func TestParsePolicyRef_PortInRegistry(t *testing.T) {
-	ref, err := complytime.ParsePolicyRef("localhost:5000/policy@v2")
+	ref, err := complytime.ParsePolicyRef("localhost:5000/policy:v2")
 	require.NoError(t, err)
 	assert.Equal(t, "localhost:5000", ref.Registry)
 	assert.Equal(t, "policy", ref.Repository)
@@ -219,42 +219,42 @@ func TestParsePolicyRef_NoDeprecationWarning_BareID(t *testing.T) {
 }
 
 func TestPolicyEntry_EffectiveID_ExplicitID(t *testing.T) {
-	p := complytime.PolicyEntry{URL: "registry.com/policies/nist-800-53-r5@v1.0", ID: "nist"}
+	p := complytime.PolicyEntry{URL: "registry.com/policies/nist-800-53-r5:v1.0", ID: "nist"}
 	assert.Equal(t, "nist", p.EffectiveID())
 }
 
 func TestPolicyEntry_EffectiveID_DerivedFromURL(t *testing.T) {
-	p := complytime.PolicyEntry{URL: "registry.com/policies/nist-800-53-r5@v1.0"}
+	p := complytime.PolicyEntry{URL: "registry.com/policies/nist-800-53-r5:v1.0"}
 	assert.Equal(t, "nist-800-53-r5", p.EffectiveID())
 }
 
 func TestPolicyEntry_EffectiveID_NestedPath(t *testing.T) {
-	p := complytime.PolicyEntry{URL: "registry.com/org/team/cis-fedora@v2.0"}
+	p := complytime.PolicyEntry{URL: "registry.com/org/team/cis-fedora:v2.0"}
 	assert.Equal(t, "cis-fedora", p.EffectiveID())
 }
 
 func TestFindPolicy_ByEffectiveID(t *testing.T) {
 	policies := []complytime.PolicyEntry{
-		{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
-		{URL: "ghcr.io/cis@v2.0"},
+		{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
+		{URL: "ghcr.io/cis:v2.0"},
 	}
 	entry, ok := complytime.FindPolicy(policies, "nist")
 	assert.True(t, ok)
-	assert.Equal(t, "registry.com/policies/nist@v1.0", entry.URL)
+	assert.Equal(t, "registry.com/policies/nist:v1.0", entry.URL)
 }
 
 func TestFindPolicy_ByDerivedID(t *testing.T) {
 	policies := []complytime.PolicyEntry{
-		{URL: "registry.com/policies/nist-800-53-r5@v1.0"},
+		{URL: "registry.com/policies/nist-800-53-r5:v1.0"},
 	}
 	entry, ok := complytime.FindPolicy(policies, "nist-800-53-r5")
 	assert.True(t, ok)
-	assert.Equal(t, "registry.com/policies/nist-800-53-r5@v1.0", entry.URL)
+	assert.Equal(t, "registry.com/policies/nist-800-53-r5:v1.0", entry.URL)
 }
 
 func TestFindPolicy_NotFound(t *testing.T) {
 	policies := []complytime.PolicyEntry{
-		{URL: "registry.com/policies/nist@v1.0"},
+		{URL: "registry.com/policies/nist:v1.0"},
 	}
 	_, ok := complytime.FindPolicy(policies, "nonexistent")
 	assert.False(t, ok)
@@ -263,7 +263,7 @@ func TestFindPolicy_NotFound(t *testing.T) {
 func TestValidate_Valid(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
+			{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
 		},
 		Targets: []complytime.TargetConfig{{
 			ID:       "local",
@@ -276,7 +276,7 @@ func TestValidate_Valid(t *testing.T) {
 func TestValidate_ValidWithDerivedID(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/policies/nist-800-53-r5@v1.0"},
+			{URL: "registry.com/policies/nist-800-53-r5:v1.0"},
 		},
 		Targets: []complytime.TargetConfig{{
 			ID:       "local",
@@ -305,8 +305,8 @@ func TestValidate_EmptyURL(t *testing.T) {
 func TestValidate_DuplicateURL(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1"},
-			{URL: "registry.com/a@v1"},
+			{URL: "registry.com/a:v1"},
+			{URL: "registry.com/a:v1"},
 		},
 	}
 	err := complytime.Validate(cfg)
@@ -317,8 +317,8 @@ func TestValidate_DuplicateURL(t *testing.T) {
 func TestValidate_DuplicateEffectiveID(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a/nist@v1"},
-			{URL: "ghcr.io/b/nist@v2"},
+			{URL: "registry.com/a/nist:v1"},
+			{URL: "ghcr.io/b/nist:v2"},
 		},
 	}
 	err := complytime.Validate(cfg)
@@ -329,8 +329,8 @@ func TestValidate_DuplicateEffectiveID(t *testing.T) {
 func TestValidate_DuplicateExplicitID(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1", ID: "same"},
-			{URL: "ghcr.io/b@v2", ID: "same"},
+			{URL: "registry.com/a:v1", ID: "same"},
+			{URL: "ghcr.io/b:v2", ID: "same"},
 		},
 	}
 	err := complytime.Validate(cfg)
@@ -341,7 +341,7 @@ func TestValidate_DuplicateExplicitID(t *testing.T) {
 func TestValidate_TargetPolicyNotInList(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1", ID: "nist"},
+			{URL: "registry.com/a:v1", ID: "nist"},
 		},
 		Targets: []complytime.TargetConfig{{
 			ID:       "local",
@@ -356,7 +356,7 @@ func TestValidate_TargetPolicyNotInList(t *testing.T) {
 func TestValidate_DuplicateTarget(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1", ID: "nist"},
+			{URL: "registry.com/a:v1", ID: "nist"},
 		},
 		Targets: []complytime.TargetConfig{
 			{ID: "local", Policies: []string{"nist"}},
@@ -371,7 +371,7 @@ func TestValidate_DuplicateTarget(t *testing.T) {
 func TestValidate_TargetNoPolicies(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1"},
+			{URL: "registry.com/a:v1"},
 		},
 		Targets: []complytime.TargetConfig{{ID: "local"}},
 	}
@@ -382,8 +382,8 @@ func TestValidate_TargetNoPolicies(t *testing.T) {
 
 func TestPolicyIDs(t *testing.T) {
 	policies := []complytime.PolicyEntry{
-		{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
-		{URL: "ghcr.io/cis-fedora@v2.0"},
+		{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
+		{URL: "ghcr.io/cis-fedora:v2.0"},
 	}
 	m := complytime.PolicyIDs(policies)
 	assert.Len(t, m, 2)
@@ -397,7 +397,7 @@ func TestResolveEnvVars_Substitution(t *testing.T) {
 	t.Setenv("CT_TEST_HOST", "db.example.com")
 
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "target1",
 			Policies: []string{"p1"},
@@ -418,7 +418,7 @@ func TestResolveEnvVars_Substitution(t *testing.T) {
 //nolint:gosec // G101: test data, not real credentials
 func TestResolveEnvVars_UnsetVariableErrors(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "target1",
 			Policies: []string{"p1"},
@@ -439,7 +439,7 @@ func TestResolveEnvVars_MultipleRefsInOneValue(t *testing.T) {
 	t.Setenv("CT_HOST", "example.com")
 
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "target1",
 			Policies: []string{"p1"},
@@ -455,7 +455,7 @@ func TestResolveEnvVars_MultipleRefsInOneValue(t *testing.T) {
 
 func TestResolveEnvVars_NoVariables(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "target1",
 			Policies: []string{"p1"},
@@ -469,7 +469,7 @@ func TestResolveEnvVars_EmptyValue(t *testing.T) {
 	t.Setenv("CT_EMPTY", "")
 
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Targets: []complytime.TargetConfig{{
 			ID:       "target1",
 			Policies: []string{"p1"},
@@ -490,7 +490,7 @@ func TestResolveEnvVars_CollectorAuth(t *testing.T) {
 	t.Setenv("CT_TOKEN_EP", "https://idp.example.com/token")
 
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Collector: &complytime.CollectorConfig{
 			Endpoint: "localhost:4317",
 			Auth: &complytime.AuthConfig{
@@ -510,7 +510,7 @@ func TestResolveEnvVars_CollectorAuth(t *testing.T) {
 //nolint:gosec // G101: test data, not real credentials
 func TestResolveEnvVars_CollectorAuthUnset(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Collector: &complytime.CollectorConfig{
 			Endpoint: "localhost:4317",
 			Auth: &complytime.AuthConfig{
@@ -528,7 +528,7 @@ func TestResolveEnvVars_CollectorAuthUnset(t *testing.T) {
 
 func TestResolveEnvVars_CollectorNoAuth(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 		Collector: &complytime.CollectorConfig{
 			Endpoint: "localhost:4317",
 		},
@@ -539,7 +539,7 @@ func TestResolveEnvVars_CollectorNoAuth(t *testing.T) {
 
 func TestResolveEnvVars_NoCollector(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
-		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1@v1"}},
+		Policies: []complytime.PolicyEntry{{URL: "registry.com/p1:v1"}},
 	}
 
 	require.NoError(t, complytime.ResolveEnvVars(cfg))
@@ -549,7 +549,7 @@ func TestValidate_UnsupportedVersion(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Version: 99,
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1", ID: "a"},
+			{URL: "registry.com/a:v1", ID: "a"},
 		},
 	}
 	err := complytime.Validate(cfg)
@@ -561,7 +561,7 @@ func TestValidate_CurrentVersion(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Version: complytime.CurrentWorkspaceVersion,
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1", ID: "a"},
+			{URL: "registry.com/a:v1", ID: "a"},
 		},
 		Targets: []complytime.TargetConfig{{
 			ID:       "local",
@@ -575,7 +575,7 @@ func TestValidate_ZeroVersionAllowed(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Version: 0,
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/a@v1", ID: "a"},
+			{URL: "registry.com/a:v1", ID: "a"},
 		},
 		Targets: []complytime.TargetConfig{{
 			ID:       "local",
@@ -588,7 +588,7 @@ func TestValidate_ZeroVersionAllowed(t *testing.T) {
 // T254: ValidateOCIRef tests
 
 func TestValidateOCIRef_ValidFullRef(t *testing.T) {
-	assert.NoError(t, complytime.ValidateOCIRef("registry.com/policies/nist-800-53-r5@v1.0"))
+	assert.NoError(t, complytime.ValidateOCIRef("registry.com/policies/nist-800-53-r5:v1.0"))
 }
 
 func TestValidateOCIRef_ValidWithTag(t *testing.T) {
@@ -600,19 +600,19 @@ func TestValidateOCIRef_ValidWithDigest(t *testing.T) {
 }
 
 func TestValidateOCIRef_ValidWithPort(t *testing.T) {
-	assert.NoError(t, complytime.ValidateOCIRef("localhost:5000/policies/test@v1.0"))
+	assert.NoError(t, complytime.ValidateOCIRef("localhost:5000/policies/test:v1.0"))
 }
 
 func TestValidateOCIRef_ValidHTTPS(t *testing.T) {
-	assert.NoError(t, complytime.ValidateOCIRef("https://ghcr.io/org/policy@latest"))
+	assert.NoError(t, complytime.ValidateOCIRef("https://ghcr.io/org/policy:latest"))
 }
 
 func TestValidateOCIRef_ValidHTTP(t *testing.T) {
-	assert.NoError(t, complytime.ValidateOCIRef("http://localhost:5000/policies/test@v1.0"))
+	assert.NoError(t, complytime.ValidateOCIRef("http://localhost:5000/policies/test:v1.0"))
 }
 
 func TestValidateOCIRef_ValidNestedPath(t *testing.T) {
-	assert.NoError(t, complytime.ValidateOCIRef("registry.com/org/team/policy@v2.0"))
+	assert.NoError(t, complytime.ValidateOCIRef("registry.com/org/team/policy:v2.0"))
 }
 
 func TestValidateOCIRef_RejectEmpty(t *testing.T) {
@@ -658,7 +658,7 @@ func TestValidateOCIRef_RejectBareWord(t *testing.T) {
 }
 
 func TestValidateOCIRef_RejectNoRegistryHost(t *testing.T) {
-	err := complytime.ValidateOCIRef("plaindir/repo@v1")
+	err := complytime.ValidateOCIRef("plaindir/repo:v1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must include a registry host")
 }
@@ -693,11 +693,11 @@ func TestValidate_ShellInjectionInURL(t *testing.T) {
 func TestValidate_ComplypackDuplicateURL(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
+			{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
 		},
 		Complypacks: []complytime.PolicyEntry{
-			{URL: "ghcr.io/org/pack-a@v1"},
-			{URL: "ghcr.io/org/pack-a@v1"},
+			{URL: "ghcr.io/org/pack-a:v1"},
+			{URL: "ghcr.io/org/pack-a:v1"},
 		},
 	}
 	err := complytime.Validate(cfg)
@@ -708,11 +708,11 @@ func TestValidate_ComplypackDuplicateURL(t *testing.T) {
 func TestValidate_ComplypackDuplicateEffectiveID(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
+			{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
 		},
 		Complypacks: []complytime.PolicyEntry{
-			{URL: "registry.com/org/mypack@v1"},
-			{URL: "ghcr.io/other/mypack@v2"},
+			{URL: "registry.com/org/mypack:v1"},
+			{URL: "ghcr.io/other/mypack:v2"},
 		},
 	}
 	err := complytime.Validate(cfg)
@@ -723,7 +723,7 @@ func TestValidate_ComplypackDuplicateEffectiveID(t *testing.T) {
 func TestValidate_ComplypackAndPolicySameURL_Allowed(t *testing.T) {
 	// Cross-list independence: the same URL can appear in both
 	// policies and complypacks without conflict.
-	sharedURL := "ghcr.io/org/shared-artifact@v1.0"
+	sharedURL := "ghcr.io/org/shared-artifact:v1.0"
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
 			{URL: sharedURL, ID: "shared-policy"},
@@ -760,7 +760,7 @@ func TestValidate_ComplypackInvalidOCIRef(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &complytime.WorkspaceConfig{
 				Policies: []complytime.PolicyEntry{
-					{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
+					{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
 				},
 				Complypacks: []complytime.PolicyEntry{
 					{URL: tt.url},
@@ -776,7 +776,7 @@ func TestValidate_ComplypackInvalidOCIRef(t *testing.T) {
 func TestValidate_ComplypackEmptyURL(t *testing.T) {
 	cfg := &complytime.WorkspaceConfig{
 		Policies: []complytime.PolicyEntry{
-			{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
+			{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
 		},
 		Complypacks: []complytime.PolicyEntry{
 			{URL: ""},
@@ -800,7 +800,7 @@ func TestValidate_ComplypackEmpty_Allowed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &complytime.WorkspaceConfig{
 				Policies: []complytime.PolicyEntry{
-					{URL: "registry.com/policies/nist@v1.0", ID: "nist"},
+					{URL: "registry.com/policies/nist:v1.0", ID: "nist"},
 				},
 				Complypacks: tt.complypacks,
 				Targets: []complytime.TargetConfig{{
@@ -818,12 +818,12 @@ func TestLoadFrom_WithComplypacks(t *testing.T) {
 	configPath := filepath.Join(dir, "complytime.yml")
 
 	yamlContent := `policies:
-  - url: registry.com/policies/nist@v1.0
+  - url: registry.com/policies/nist:v1.0
     id: nist
 complypacks:
-  - url: ghcr.io/org/complypack-rhel9@v1.0
+  - url: ghcr.io/org/complypack-rhel9:v1.0
     id: rhel9
-  - url: ghcr.io/org/complypack-ubuntu@v2.0
+  - url: ghcr.io/org/complypack-ubuntu:v2.0
 targets:
   - id: local
     policies:
@@ -837,13 +837,13 @@ targets:
 
 	// Verify policies parsed correctly
 	require.Len(t, cfg.Policies, 1)
-	assert.Equal(t, "registry.com/policies/nist@v1.0", cfg.Policies[0].URL)
+	assert.Equal(t, "registry.com/policies/nist:v1.0", cfg.Policies[0].URL)
 
 	// Verify complypacks parsed correctly
 	require.Len(t, cfg.Complypacks, 2)
-	assert.Equal(t, "ghcr.io/org/complypack-rhel9@v1.0", cfg.Complypacks[0].URL)
+	assert.Equal(t, "ghcr.io/org/complypack-rhel9:v1.0", cfg.Complypacks[0].URL)
 	assert.Equal(t, "rhel9", cfg.Complypacks[0].ID)
-	assert.Equal(t, "ghcr.io/org/complypack-ubuntu@v2.0", cfg.Complypacks[1].URL)
+	assert.Equal(t, "ghcr.io/org/complypack-ubuntu:v2.0", cfg.Complypacks[1].URL)
 	assert.Empty(t, cfg.Complypacks[1].ID)
 
 	// Verify EffectiveID derivation works for the entry without explicit ID
@@ -873,7 +873,7 @@ func TestLoadFrom_InvalidComplypackURL(t *testing.T) {
 	configPath := filepath.Join(dir, "complytime.yml")
 
 	yamlContent := `policies:
-  - url: registry.com/policies/nist@v1.0
+  - url: registry.com/policies/nist:v1.0
     id: nist
 complypacks:
   - url: "   "
@@ -921,7 +921,7 @@ func TestLoadFrom_WithoutComplypacks(t *testing.T) {
 
 	// Existing config format without complypacks — must still work unchanged.
 	yamlContent := `policies:
-  - url: registry.com/policies/nist@v1.0
+  - url: registry.com/policies/nist:v1.0
     id: nist
 targets:
   - id: local
@@ -936,7 +936,7 @@ targets:
 
 	// Policies load as before
 	require.Len(t, cfg.Policies, 1)
-	assert.Equal(t, "registry.com/policies/nist@v1.0", cfg.Policies[0].URL)
+	assert.Equal(t, "registry.com/policies/nist:v1.0", cfg.Policies[0].URL)
 
 	// Complypacks is nil/empty when not present in YAML
 	assert.Empty(t, cfg.Complypacks)

@@ -41,7 +41,7 @@ func writeWorkspaceConfig(t *testing.T, content string) {
 }
 
 const minimalConfig = `policies:
-  - url: registry.example.com/policies/test-policy@v1.0
+  - url: registry.example.com/policies/test-policy:v1.0
     id: test-policy
 targets:
   - id: local
@@ -67,7 +67,7 @@ func TestScanOptions_Run_NoWorkspace(t *testing.T) {
 func TestScanOptions_Run_NoTargets(t *testing.T) {
 	chdirTemp(t)
 	writeWorkspaceConfig(t, `policies:
-  - url: registry.example.com/policies/test@v1.0
+  - url: registry.example.com/policies/test:v1.0
 targets: []
 `)
 	o := &scanOptions{
@@ -193,9 +193,9 @@ func TestMaybeExport_EnvVarParsing(t *testing.T) {
 
 // multiPolicyConfig has a target referencing two policies for disambiguation tests.
 const multiPolicyConfig = `policies:
-  - url: registry.example.com/policies/nist@v1.0
+  - url: registry.example.com/policies/nist:v1.0
     id: nist
-  - url: registry.example.com/policies/cis@v1.0
+  - url: registry.example.com/policies/cis:v1.0
     id: cis
 targets:
   - id: prod
@@ -670,10 +670,10 @@ func TestGetOptions_Run_NoWorkspace(t *testing.T) {
 func TestGetOptions_Run_WithComplypacks(t *testing.T) {
 	chdirTemp(t)
 	writeWorkspaceConfig(t, `policies:
-  - url: registry.example.com/policies/test-policy@v1.0
+  - url: registry.example.com/policies/test-policy:v1.0
     id: test-policy
 complypacks:
-  - url: registry.example.com/packs/test-pack@v1.0
+  - url: registry.example.com/packs/test-pack:v1.0
     id: test-pack
 targets:
   - id: local
@@ -1472,7 +1472,7 @@ func TestDoctorCmd_RunE_ValidWorkspace(t *testing.T) {
 	require.NoError(t, os.MkdirAll(configDir, 0o750))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(configDir, "complytime.yaml"),
-		[]byte("policies:\n  - url: registry.example.com/p@v1\ntargets: []"), 0o600))
+		[]byte("policies:\n  - url: registry.example.com/p:v1\ntargets: []"), 0o600))
 
 	common := &Common{Workspace: dir}
 	cmd := doctorCmd(common)

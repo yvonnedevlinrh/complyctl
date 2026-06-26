@@ -5,9 +5,9 @@ policies:
     id: test-opa-k8s
 
 complypacks:
-  - url: http://localhost:8765/complypacks/ampel-bp@v1.0.0
+  - url: http://localhost:8765/complypacks/ampel-bp:v1.0.0
     id: ampel-bp-pack
-  - url: http://localhost:8765/complypacks/test-opa-complypack@v1.0.0
+  - url: http://localhost:8765/complypacks/test-opa-complypack:v1.0.0
     id: opa-complypack
 
 targets:
