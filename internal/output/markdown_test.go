@@ -387,6 +387,12 @@ func TestMarkdown_ConfidenceLevelShown(t *testing.T) {
 						ConfidenceLevel: gemara.Low,
 					},
 					{
+						Requirement:     gemara.EntryMapping{EntryId: "req-high"},
+						Result:          gemara.Failed,
+						Message:         "failed with high confidence",
+						ConfidenceLevel: gemara.High,
+					},
+					{
 						Requirement:     gemara.EntryMapping{EntryId: "req-undetermined"},
 						Result:          gemara.Failed,
 						Message:         "failed with undetermined confidence",
@@ -406,7 +412,8 @@ func TestMarkdown_ConfidenceLevelShown(t *testing.T) {
 	content := string(data)
 
 	assert.Contains(t, content, "**Confidence**: Low")
-	assert.Contains(t, content, "**Confidence**: Undetermined")
+	assert.Contains(t, content, "**Confidence**: High")
+	assert.NotContains(t, content, "**Confidence**: Undetermined")
 }
 
 func TestMarkdown_ToolAttribution(t *testing.T) {

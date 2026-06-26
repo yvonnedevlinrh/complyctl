@@ -217,10 +217,8 @@ func (m *Markdown) writeFindings(sb *strings.Builder) {
 		fmt.Fprintf(sb, "- **Control**: %s\n", f.controlID)
 		fmt.Fprintf(sb, "- **Message**: %s\n", f.message)
 
-		if f.confidence != gemara.High && f.confidence != gemara.Undetermined {
+		if f.confidence != gemara.Undetermined {
 			fmt.Fprintf(sb, "- **Confidence**: %s\n", f.confidence.String())
-		} else if f.confidence == gemara.Undetermined {
-			fmt.Fprintf(sb, "- **Confidence**: Undetermined\n")
 		}
 
 		if f.recommendation != "" {
