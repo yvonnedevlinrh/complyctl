@@ -223,7 +223,7 @@ Lists discovered scanning providers with their evaluator ID, path, health status
 ```yaml
 # .complytime/complytime.yaml
 policies:
-  - url: registry.example.com/policies/nist-800-53-r5@v1.0.0
+  - url: registry.example.com/policies/nist-800-53-r5:v1.0.0
     id: nist
   - url: registry.example.com/policies/cis-benchmark
 variables:
@@ -245,7 +245,7 @@ targets:
 
 | Field | Description |
 |:---|:---|
-| `policies[].url` | Full OCI reference (registry + repository + optional `@version`) |
+| `policies[].url` | Full OCI reference (registry + repository + optional `:tag`) |
 | `policies[].id` | Optional shortname; if omitted, derived from last path segment of URL |
 | `variables` | Workspace-scoped constants passed to providers via Generate RPC |
 | `targets[].id` | Scan target identifier |

@@ -89,7 +89,7 @@ const emptyConfigTemplate = `# complytime.yaml - workspace configuration
 #
 # Add policies using the format below:
 #   policies:
-#     - url: registry.example.com/policies/my-policy@v1.0
+#     - url: registry.example.com/policies/my-policy:v1.0
 #       id: my-policy    # optional; auto-derived from URL path if omitted
 #
 # Add targets that reference policies by effective ID:
@@ -115,7 +115,7 @@ func promptPolicies() []complytime.PolicyEntry {
 	seenURLs := make(map[string]bool)
 
 	for i := 1; ; i++ {
-		fmt.Printf("  Policy %d URL (e.g. registry.com/policies/nist-800-53-r5@v1.0): ", i)
+		fmt.Printf("  Policy %d URL (e.g. registry.com/policies/nist-800-53-r5:v1.0): ", i)
 		var url string
 		if _, err := fmt.Scanln(&url); err != nil || strings.TrimSpace(url) == "" {
 			break
