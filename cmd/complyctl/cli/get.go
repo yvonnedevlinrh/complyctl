@@ -13,6 +13,7 @@ import (
 
 	"github.com/complytime/complyctl/internal/cache"
 	"github.com/complytime/complyctl/internal/complytime"
+	"github.com/complytime/complyctl/internal/policy"
 	"github.com/complytime/complyctl/internal/registry"
 )
 
@@ -82,17 +83,17 @@ func (o *getOptions) run(ctx context.Context) error {
 
 	// Chain policy and complypack sync into a single error return.
 	// syncComplypacks is a no-op when no complypacks are configured.
-	return o.syncAll(ctx, cfg)
+	return o.syncAll(ctx, cfg, baseDir)
 }
 
 // syncAll runs policy sync followed by complypack sync. Keeping both
 // calls in a single method avoids an extra branch in run() and keeps
 // the CRAP score aligned with the baseline.
-func (o *getOptions) syncAll(ctx context.Context, cfg *complytime.WorkspaceConfig) error {
+func (o *getOptions) syncAll(ctx context.Context, cfg *complytime.WorkspaceConfig, baseDir string) error {
 	if err := o.syncPolicies(ctx, cfg); err != nil {
 		return err
 	}
-	return o.syncComplypacks(ctx, cfg)
+	return o.syncComplypacks(ctx, cfg, baseDir)
 }
 
 func (o *getOptions) syncPolicies(ctx context.Context, cfg *complytime.WorkspaceConfig) error {
@@ -115,7 +116,7 @@ func (o *getOptions) syncPolicies(ctx context.Context, cfg *complytime.Workspace
 
 // syncComplypacks fetches complypack artifacts listed in the workspace config.
 // Skips silently when no complypacks are configured.
-func (o *getOptions) syncComplypacks(ctx context.Context, cfg *complytime.WorkspaceConfig) error {
+func (o *getOptions) syncComplypacks(ctx context.Context, cfg *complytime.WorkspaceConfig, baseDir string) error {
 	if len(cfg.Complypacks) == 0 {
 		return nil
 	}
@@ -132,7 +133,7 @@ func (o *getOptions) syncComplypacks(ctx context.Context, cfg *complytime.Worksp
 		return fmt.Errorf("authentication setup failed: %w", err)
 	}
 
-	return syncAllComplypacks(ctx, state, credFunc, cfg.Complypacks, o.cacheDir)
+	return syncAllComplypacks(ctx, state, credFunc, cfg.Complypacks, o.cacheDir, baseDir)
 }
 
 func syncAllPolicies(ctx context.Context, cacheMgr *cache.Cache, state *cache.State, credFunc auth.CredentialFunc, policies []complytime.PolicyEntry) error {
@@ -189,12 +190,12 @@ func resolveLatestVersion(ctx context.Context, client *registry.Client, reposito
 	return resolvedVersion
 }
 
-func syncAllComplypacks(ctx context.Context, state *cache.State, credFunc auth.CredentialFunc, complypacks []complytime.PolicyEntry, cacheDir string) error {
+func syncAllComplypacks(ctx context.Context, state *cache.State, credFunc auth.CredentialFunc, complypacks []complytime.PolicyEntry, cacheDir, baseDir string) error {
 	logger.Info("Starting complypack synchronization", "complypack_count", len(complypacks))
 
 	total := len(complypacks)
 	for i, entry := range complypacks {
-		if err := syncSingleComplypack(ctx, state, credFunc, entry, i+1, total, cacheDir); err != nil {
+		if err := syncSingleComplypack(ctx, state, credFunc, entry, i+1, total, cacheDir, baseDir); err != nil {
 			return err
 		}
 	}
@@ -204,7 +205,7 @@ func syncAllComplypacks(ctx context.Context, state *cache.State, credFunc auth.C
 	return nil
 }
 
-func syncSingleComplypack(ctx context.Context, state *cache.State, credFunc auth.CredentialFunc, entry complytime.PolicyEntry, index, total int, cacheDir string) error {
+func syncSingleComplypack(ctx context.Context, state *cache.State, credFunc auth.CredentialFunc, entry complytime.PolicyEntry, index, total int, cacheDir, baseDir string) error {
 	ref, err := complytime.ParsePolicyRef(entry.URL)
 	if err != nil {
 		return fmt.Errorf("invalid complypack reference %q: %w", entry.URL, err)
@@ -234,7 +235,37 @@ func syncSingleComplypack(ctx context.Context, state *cache.State, credFunc auth
 	if fetched {
 		fmt.Fprintf(os.Stderr, "WARNING: complypack %s has not been cryptographically verified\n", entry.EffectiveID())
 		logger.Warn("Complypack not cryptographically verified", "complypack", entry.EffectiveID())
+		invalidateGenerationForComplypack(state, ref.Repository, baseDir)
 	}
 
 	return nil
+}
+
+// invalidateGenerationForComplypack removes workspace generation state and
+// evaluator artifacts when a complypack has been re-fetched. Errors are logged
+// as warnings — they do not fail the get command.
+func invalidateGenerationForComplypack(state *cache.State, repository, baseDir string) {
+	ps, exists := state.GetComplypackState(repository)
+	if !exists || ps.EvaluatorID == "" {
+		return
+	}
+	evalID := ps.EvaluatorID
+
+	skipWarnings, err := policy.InvalidateForEvaluator(baseDir, evalID)
+	for _, w := range skipWarnings {
+		logger.Debug("Generation state invalidation", "warning", w)
+	}
+	if err != nil {
+		logger.Warn("Failed to invalidate generation state", "evaluator", evalID, "error", err)
+		fmt.Fprintf(os.Stderr, "WARNING: failed to invalidate generation state for %s: %v\n", evalID, err)
+		return
+	}
+	if err := policy.RemoveEvaluatorArtifacts(baseDir, evalID); err != nil {
+		logger.Warn("Failed to remove evaluator artifacts", "evaluator", evalID, "error", err)
+		fmt.Fprintf(os.Stderr, "WARNING: failed to remove evaluator artifacts for %s: %v\n", evalID, err)
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "Complypack %s updated — generation cache invalidated for %s\n", repository, evalID)
+	logger.Info("Generation cache invalidated after complypack update", "repository", repository, "evaluator", evalID)
 }

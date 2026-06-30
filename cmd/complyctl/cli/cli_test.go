@@ -1488,3 +1488,151 @@ func TestBuildReqToComplypackRef_SkipsMissingDigest(t *testing.T) {
 	m := buildReqToComplypackRef(cacheDir, groups)
 	assert.Empty(t, m)
 }
+
+// --- invalidateGenerationForComplypack tests ---
+
+func TestInvalidateGenerationForComplypack_InvalidatesOnFetch(t *testing.T) {
+	baseDir := t.TempDir()
+	cacheDir := t.TempDir()
+
+	// 1. Seed generation state referencing the "opa" evaluator.
+	genState := &policy.GenerationState{
+		PolicyID:     "test-policy",
+		PolicyDigest: "sha256:abc",
+		EvaluatorIDs: []string{"opa"},
+	}
+	require.NoError(t, policy.SaveGenerationState(baseDir, "test-policy", genState))
+
+	// 2. Seed evaluator artifact directory.
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "opa")
+	require.NoError(t, os.MkdirAll(evalDir, 0750))
+	require.NoError(t, os.WriteFile(filepath.Join(evalDir, "scan-config.json"), []byte("{}"), 0600))
+
+	// 3. Seed cache state with a complypack entry mapping repository to evaluator.
+	cacheState := &cache.State{
+		Complypacks: map[string]cache.PolicyState{
+			"registry.example.com/packs/opa": {
+				Version:     "1.0.0",
+				Digest:      "sha256:cp-digest",
+				EvaluatorID: "opa",
+			},
+		},
+	}
+	require.NoError(t, cache.SaveState(cacheState, cacheDir))
+
+	// Reload state from disk (simulates the real flow).
+	loadedState, err := cache.LoadState(cacheDir)
+	require.NoError(t, err)
+
+	// 4. Call invalidateGenerationForComplypack.
+	invalidateGenerationForComplypack(loadedState, "registry.example.com/packs/opa", baseDir)
+
+	// 5. Verify generation state file is removed.
+	loaded, err := policy.LoadGenerationState(baseDir, "test-policy")
+	assert.NoError(t, err)
+	assert.Nil(t, loaded, "generation state should be deleted after invalidation")
+
+	// 6. Verify evaluator artifact directory is removed.
+	_, statErr := os.Stat(evalDir)
+	assert.True(t, os.IsNotExist(statErr), "evaluator artifact dir should be removed")
+}
+
+func TestInvalidateGenerationForComplypack_NoOpWhenRepositoryUnknown(t *testing.T) {
+	baseDir := t.TempDir()
+	cacheDir := t.TempDir()
+
+	// Seed generation state that should NOT be touched.
+	genState := &policy.GenerationState{
+		PolicyID:     "test-policy",
+		PolicyDigest: "sha256:abc",
+		EvaluatorIDs: []string{"opa"},
+	}
+	require.NoError(t, policy.SaveGenerationState(baseDir, "test-policy", genState))
+
+	// Empty cache state — no complypack entry for the repository.
+	cacheState := &cache.State{
+		Complypacks: make(map[string]cache.PolicyState),
+	}
+	require.NoError(t, cache.SaveState(cacheState, cacheDir))
+	loadedState, err := cache.LoadState(cacheDir)
+	require.NoError(t, err)
+
+	invalidateGenerationForComplypack(loadedState, "registry.example.com/packs/unknown", baseDir)
+
+	// Generation state should be preserved.
+	loaded, err := policy.LoadGenerationState(baseDir, "test-policy")
+	assert.NoError(t, err)
+	assert.NotNil(t, loaded, "generation state should be preserved when repository is unknown")
+}
+
+func TestInvalidateGenerationForComplypack_NestedPolicyID(t *testing.T) {
+	baseDir := t.TempDir()
+	cacheDir := t.TempDir()
+
+	genState := &policy.GenerationState{
+		PolicyID:     "policies/nested-policy",
+		PolicyDigest: "sha256:abc",
+		EvaluatorIDs: []string{"opa"},
+	}
+	require.NoError(t, policy.SaveGenerationState(baseDir, "policies/nested-policy", genState))
+
+	evalDir := filepath.Join(baseDir, complytime.WorkspaceDir, "opa")
+	require.NoError(t, os.MkdirAll(evalDir, 0750))
+	require.NoError(t, os.WriteFile(filepath.Join(evalDir, "scan-config.json"), []byte("{}"), 0600))
+
+	cacheState := &cache.State{
+		Complypacks: map[string]cache.PolicyState{
+			"registry.example.com/packs/opa": {
+				Version:     "1.0.0",
+				Digest:      "sha256:cp-digest",
+				EvaluatorID: "opa",
+			},
+		},
+	}
+	require.NoError(t, cache.SaveState(cacheState, cacheDir))
+	loadedState, err := cache.LoadState(cacheDir)
+	require.NoError(t, err)
+
+	invalidateGenerationForComplypack(loadedState, "registry.example.com/packs/opa", baseDir)
+
+	loaded, err := policy.LoadGenerationState(baseDir, "policies/nested-policy")
+	assert.NoError(t, err)
+	assert.Nil(t, loaded, "nested generation state should be deleted after invalidation")
+
+	_, statErr := os.Stat(evalDir)
+	assert.True(t, os.IsNotExist(statErr), "evaluator artifact dir should be removed")
+}
+
+func TestInvalidateGenerationForComplypack_NoOpWhenEvaluatorIDEmpty(t *testing.T) {
+	baseDir := t.TempDir()
+	cacheDir := t.TempDir()
+
+	// Seed generation state that should NOT be touched.
+	genState := &policy.GenerationState{
+		PolicyID:     "test-policy",
+		PolicyDigest: "sha256:abc",
+		EvaluatorIDs: []string{"opa"},
+	}
+	require.NoError(t, policy.SaveGenerationState(baseDir, "test-policy", genState))
+
+	// Complypack entry exists but has empty evaluator ID.
+	cacheState := &cache.State{
+		Complypacks: map[string]cache.PolicyState{
+			"registry.example.com/packs/opa": {
+				Version:     "1.0.0",
+				Digest:      "sha256:cp-digest",
+				EvaluatorID: "",
+			},
+		},
+	}
+	require.NoError(t, cache.SaveState(cacheState, cacheDir))
+	loadedState, err := cache.LoadState(cacheDir)
+	require.NoError(t, err)
+
+	invalidateGenerationForComplypack(loadedState, "registry.example.com/packs/opa", baseDir)
+
+	// Generation state should be preserved.
+	loaded, err := policy.LoadGenerationState(baseDir, "test-policy")
+	assert.NoError(t, err)
+	assert.NotNil(t, loaded, "generation state should be preserved when evaluator ID is empty")
+}

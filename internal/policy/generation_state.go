@@ -8,8 +8,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/complytime/complyctl/internal/cache"
 	"github.com/complytime/complyctl/internal/complytime"
 )
 
@@ -91,4 +94,60 @@ func NewGenerationState(policyID, digest string, evaluatorIDs []string, complypa
 		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
 		EvaluatorIDs:      evaluatorIDs,
 	}
+}
+
+// InvalidateForEvaluator removes generation state files that reference the
+// given evaluator-id. This forces the next scan to trigger a fresh Generate
+// cycle for any policy that used that evaluator. Returns nil if the generation
+// directory does not exist. Walks subdirectories since policy IDs may contain
+// path separators (e.g. "policies/cis-fedora-l1-workstation").
+//
+// Files that cannot be read or contain malformed JSON are skipped and reported
+// in the returned warnings slice so the caller can log them for diagnostics.
+func InvalidateForEvaluator(baseDir, evaluatorID string) (warnings []string, _ error) {
+	genDir := filepath.Join(baseDir, complytime.WorkspaceDir, "generation")
+
+	err := filepath.WalkDir(genDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".json") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			warnings = append(warnings, fmt.Sprintf("skipped unreadable file %s: %v", path, readErr))
+			return nil
+		}
+		var state GenerationState
+		if jsonErr := json.Unmarshal(data, &state); jsonErr != nil {
+			warnings = append(warnings, fmt.Sprintf("skipped malformed JSON %s: %v", path, jsonErr))
+			return nil
+		}
+		if slices.Contains(state.EvaluatorIDs, evaluatorID) {
+			if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+				return fmt.Errorf("failed to remove generation state %s: %w", path, rmErr)
+			}
+		}
+		return nil
+	})
+	return warnings, err
+}
+
+// RemoveEvaluatorArtifacts removes the workspace evaluator artifact directory
+// ({baseDir}/.complytime/{evaluatorID}/). Returns nil if the directory does
+// not exist. Validates evaluatorID as a safe path component before constructing
+// the target path.
+func RemoveEvaluatorArtifacts(baseDir, evaluatorID string) error {
+	if err := cache.ValidatePathComponent(evaluatorID); err != nil {
+		return fmt.Errorf("invalid evaluator ID: %w", err)
+	}
+	dir := filepath.Join(baseDir, complytime.WorkspaceDir, evaluatorID)
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("failed to remove evaluator artifacts %s: %w", dir, err)
+	}
+	return nil
 }
