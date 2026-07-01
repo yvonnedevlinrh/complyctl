@@ -46,6 +46,7 @@ type Sync struct {
 	source PolicySource
 }
 
+// NewSync creates a Sync instance with the given cache, state, and source.
 func NewSync(cache *Cache, state *State, source PolicySource) *Sync {
 	return &Sync{
 		cache:  cache,
@@ -57,9 +58,12 @@ func NewSync(cache *Cache, state *State, source PolicySource) *Sync {
 // SyncPolicy performs incremental synchronization of a policy. Compares local
 // digest against remote manifest digest; if they match, sync is skipped. On
 // failure, the OCI Layout store retains its previous state.
-func (s *Sync) SyncPolicy(ctx context.Context, policyID, version string) error {
+//
+// Returns (true, nil) when a fetch occurred, (false, nil) when the local cache
+// was already up-to-date (incremental skip), or (false, err) on failure.
+func (s *Sync) SyncPolicy(ctx context.Context, policyID, version string) (bool, error) {
 	if policyID == "" {
-		return fmt.Errorf("policy ID cannot be empty")
+		return false, fmt.Errorf("policy ID cannot be empty")
 	}
 
 	tag, digest := classifyVersion(version)
@@ -68,9 +72,9 @@ func (s *Sync) SyncPolicy(ctx context.Context, policyID, version string) error {
 	remoteDigest, remoteVersion, err := s.source.DefinitionVersion(ctx, lookupRef)
 	if err != nil {
 		if errors.Is(err, registry.ErrVersionNotFound) {
-			return fmt.Errorf("policy %s: %w", policyID, err)
+			return false, fmt.Errorf("policy %s: %w", policyID, err)
 		}
-		return fmt.Errorf("policy %s: registry unreachable: %w", policyID, err)
+		return false, fmt.Errorf("policy %s: registry unreachable: %w", policyID, err)
 	}
 
 	if version == "" || version == "latest" {
@@ -79,23 +83,23 @@ func (s *Sync) SyncPolicy(ctx context.Context, policyID, version string) error {
 
 	localState, exists := s.state.GetPolicyState(policyID)
 	if exists && localState.Digest == remoteDigest && s.cache.PolicyStoreExists(policyID) {
-		return nil
+		return false, nil
 	}
 
 	localStore, err := s.cache.NewPolicyStore(policyID)
 	if err != nil {
-		return fmt.Errorf("failed to open local store for policy %s: %w", policyID, err)
+		return false, fmt.Errorf("failed to open local store for policy %s: %w", policyID, err)
 	}
 
 	_, err = s.source.CopyPolicy(ctx, policyID, version, localStore)
 	if err != nil {
-		return fmt.Errorf("policy %s@%s: copy failed: %w", policyID, version, err)
+		return false, fmt.Errorf("policy %s@%s: copy failed: %w", policyID, version, err)
 	}
 
 	s.state.UpdatePolicyState(policyID, version, remoteDigest)
 	if err := SaveState(s.state, s.cache.Dir()); err != nil {
-		return fmt.Errorf("failed to save state after sync: %w (policy blobs are valid)", err)
+		return false, fmt.Errorf("failed to save state after sync: %w (policy blobs are valid)", err)
 	}
 
-	return nil
+	return true, nil
 }

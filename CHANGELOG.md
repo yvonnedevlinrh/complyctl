@@ -69,6 +69,14 @@
   + `complytime-mapping.json`), `test-opa-bp` policy-id and
   `test-k8s-deployment` target in workspace configuration. OPA command
   reference added to `docs/TESTING_ENVIRONMENT.md`.
+- `complyctl get` emits a NOTE to stderr when a freshly fetched policy
+  or complypack was fetched without signature verification, directing
+  users to the planned sigstore-go integration (#643) (#607)
+- `complyctl list` displays a DIGEST column showing the abbreviated OCI
+  manifest digest for each cached policy. Uncached policies show `-`. (#607)
+- `SyncPolicy` returns `(bool, error)` to gate warnings on fresh fetches.
+  THR02 mitigations MIT01 (warning) and MIT03 (digest visibility)
+  documented in the threat catalog. (#607)
 
 ### Deprecated
 

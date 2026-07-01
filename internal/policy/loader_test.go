@@ -122,7 +122,8 @@ func seedTestPolicy(t *testing.T, policyID, version string) *Loader {
 	require.NoError(t, err)
 
 	sync := cache.NewSync(cacheMgr, state, mock)
-	require.NoError(t, sync.SyncPolicy(context.Background(), policyID, "latest"))
+	_, err = sync.SyncPolicy(context.Background(), policyID, "latest")
+	require.NoError(t, err)
 
 	return NewLoader(cacheMgr)
 }
@@ -168,7 +169,8 @@ func seedBundlePolicy(t *testing.T, policyID, version string, files []bundle.Fil
 	require.NoError(t, err)
 
 	sync := cache.NewSync(cacheMgr, state, mock)
-	require.NoError(t, sync.SyncPolicy(context.Background(), policyID, "latest"))
+	_, err = sync.SyncPolicy(context.Background(), policyID, "latest")
+	require.NoError(t, err)
 
 	return NewLoader(cacheMgr)
 }

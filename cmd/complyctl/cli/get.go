@@ -168,13 +168,25 @@ func syncSinglePolicy(ctx context.Context, cacheMgr *cache.Cache, state *cache.S
 
 	fmt.Fprintf(os.Stderr, "Syncing policy %d/%d: %s... ", index, total, entry.EffectiveID())
 	logger.Info("Syncing policy", "policy", ref.Repository, "version", version)
-	if err := sync.SyncPolicy(ctx, ref.Repository, version); err != nil {
+	fetched, err := sync.SyncPolicy(ctx, ref.Repository, version)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed")
 		logger.Error("Policy sync failed", "policy", ref.Repository, "error", err)
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "done")
-	logger.Info("Policy synced", "policy", entry.EffectiveID())
+
+	if fetched {
+		ps, _ := state.GetPolicyState(ref.Repository)
+		logger.Info("Policy synced", "policy", entry.EffectiveID(), "digest", ps.Digest)
+		fmt.Fprintf(os.Stderr, "NOTE: policy %s was fetched without signature verification. "+
+			"Signature verification support is planned (see https://github.com/complytime/complyctl/issues/643). "+
+			"Until then, ensure your policy sources are trusted.\n", entry.EffectiveID())
+		logger.Warn("Policy not cryptographically verified", "policy", entry.EffectiveID(), "digest", ps.Digest)
+	} else {
+		logger.Info("Policy synced", "policy", entry.EffectiveID())
+	}
+
 	return nil
 }
 
@@ -233,7 +245,9 @@ func syncSingleComplypack(ctx context.Context, state *cache.State, credFunc auth
 	logger.Info("Complypack synced", "complypack", entry.EffectiveID())
 
 	if fetched {
-		fmt.Fprintf(os.Stderr, "WARNING: complypack %s has not been cryptographically verified\n", entry.EffectiveID())
+		fmt.Fprintf(os.Stderr, "NOTE: complypack %s was fetched without signature verification. "+
+			"Signature verification support is planned (see https://github.com/complytime/complyctl/issues/643). "+
+			"Until then, ensure your policy sources are trusted.\n", entry.EffectiveID())
 		logger.Warn("Complypack not cryptographically verified", "complypack", entry.EffectiveID())
 		invalidateGenerationForComplypack(state, ref.Repository, baseDir)
 	}

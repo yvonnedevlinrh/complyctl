@@ -520,6 +520,82 @@ func TestListOptions_Run_ValidWorkspace(t *testing.T) {
 	assert.Contains(t, buf.String(), "POLICY ID")
 }
 
+func TestListOptions_Run_ShowsDigestColumn(t *testing.T) {
+	chdirTemp(t)
+	writeWorkspaceConfig(t, minimalConfig)
+
+	cacheDir := t.TempDir()
+	// Seed cache state with a policy entry matching the config's repository.
+	// ParsePolicyRef extracts "policies/test-policy" as the repository from
+	// "registry.example.com/policies/test-policy:v1.0".
+	state := &cache.State{
+		Policies: map[string]cache.PolicyState{
+			"policies/test-policy": {
+				Version: "v1.0",
+				Digest:  "sha256:9f86d081884c7d65",
+			},
+		},
+	}
+	require.NoError(t, cache.SaveState(state, cacheDir))
+
+	var buf bytes.Buffer
+	o := &listOptions{
+		Common:   &Common{Output: Output{Out: &buf}},
+		cacheDir: cacheDir,
+	}
+	err := o.run(context.Background())
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "DIGEST")
+	assert.Contains(t, output, "sha256:9f86d081884c")
+}
+
+func TestListOptions_Run_UncachedPolicyShowsDash(t *testing.T) {
+	chdirTemp(t)
+	writeWorkspaceConfig(t, minimalConfig)
+
+	cacheDir := t.TempDir()
+	// No state seeded — policy is not cached.
+
+	var buf bytes.Buffer
+	o := &listOptions{
+		Common:   &Common{Output: Output{Out: &buf}},
+		cacheDir: cacheDir,
+	}
+	err := o.run(context.Background())
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "DIGEST")
+	// Should show "-" for digest when uncached. Version column also shows "-".
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	require.GreaterOrEqual(t, len(lines), 2, "should have header + at least one data row")
+	dataRow := lines[1]
+	// Count occurrences of "-" in the data row (version, digest = 2)
+	dashCount := strings.Count(dataRow, "-")
+	assert.GreaterOrEqual(t, dashCount, 2, "uncached policy should show '-' for version and digest")
+}
+
+func TestAbbreviateDigest(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"full sha256", "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b", "sha256:9f86d081884c"},
+		{"exact 12 hex chars", "sha256:9f86d081884c", "sha256:9f86d081884c"},
+		{"empty", "", "-"},
+		{"no colon", "invaliddigest", "invaliddigest"},
+		{"sha512 full", "sha512:cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e", "sha512:cf83e1357eef"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expect, abbreviateDigest(tt.input))
+		})
+	}
+}
+
 // --- initOptions tests ---
 
 func TestInitOptions_Run_AlreadyExists(t *testing.T) {

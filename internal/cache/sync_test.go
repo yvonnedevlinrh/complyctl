@@ -31,8 +31,9 @@ func TestSync_CopyOnSuccess(t *testing.T) {
 
 	sync := cache.NewSync(cacheMgr, state, mock)
 
-	err = sync.SyncPolicy(context.Background(), "test-policy", "latest")
+	fetched, err := sync.SyncPolicy(context.Background(), "test-policy", "latest")
 	require.NoError(t, err)
+	assert.True(t, fetched, "first sync should report a fetch")
 
 	// Verify state was updated
 	state2, err := cache.LoadState(cacheDir)
@@ -63,8 +64,9 @@ func TestSync_CopyOnSuccess_PinnedVersion(t *testing.T) {
 
 	sync := cache.NewSync(cacheMgr, state, mock)
 
-	err = sync.SyncPolicy(context.Background(), "test-policy", "v1.0.0")
+	fetched, err := sync.SyncPolicy(context.Background(), "test-policy", "v1.0.0")
 	require.NoError(t, err)
+	assert.True(t, fetched, "first sync should report a fetch")
 
 	assert.Equal(t, "test-policy:v1.0.0", mock.LastLookupRef,
 		"source should receive the versioned ref when a pinned version is provided")
@@ -90,8 +92,9 @@ func TestSync_FailureOnMissingPolicy(t *testing.T) {
 
 	sync := cache.NewSync(cacheMgr, state, mock)
 
-	err = sync.SyncPolicy(context.Background(), "nonexistent-policy", "latest")
+	fetched, err := sync.SyncPolicy(context.Background(), "nonexistent-policy", "latest")
 	require.Error(t, err)
+	assert.False(t, fetched, "failed sync should not report a fetch")
 	assert.Contains(t, err.Error(), "not found")
 }
 
@@ -110,8 +113,9 @@ func TestSync_IncrementalSkip(t *testing.T) {
 	sync := cache.NewSync(cacheMgr, state, mock)
 
 	// First sync
-	err = sync.SyncPolicy(context.Background(), "test-policy", "latest")
+	fetched, err := sync.SyncPolicy(context.Background(), "test-policy", "latest")
 	require.NoError(t, err)
+	assert.True(t, fetched, "first sync should report a fetch")
 
 	state2, err := cache.LoadState(cacheDir)
 	require.NoError(t, err)
@@ -121,8 +125,9 @@ func TestSync_IncrementalSkip(t *testing.T) {
 
 	// Second sync with same digest — should be no-op (FR-004)
 	sync2 := cache.NewSync(cacheMgr, state2, mock)
-	err = sync2.SyncPolicy(context.Background(), "test-policy", "latest")
+	fetched2, err := sync2.SyncPolicy(context.Background(), "test-policy", "latest")
 	require.NoError(t, err)
+	assert.False(t, fetched2, "incremental skip should not report a fetch")
 
 	state3, err := cache.LoadState(cacheDir)
 	require.NoError(t, err)
@@ -140,8 +145,9 @@ func TestSync_EmptyPolicyID(t *testing.T) {
 	state, _ := cache.LoadState(cacheDir)
 
 	sync := cache.NewSync(cacheMgr, state, mock)
-	err := sync.SyncPolicy(context.Background(), "", "latest")
+	fetched, err := sync.SyncPolicy(context.Background(), "", "latest")
 	require.Error(t, err)
+	assert.False(t, fetched, "empty policy ID should not report a fetch")
 	assert.Contains(t, err.Error(), "policy ID cannot be empty")
 }
 
@@ -159,8 +165,9 @@ func TestSync_RedownloadAfterDeletion(t *testing.T) {
 
 	sync := cache.NewSync(cacheMgr, state, mock)
 
-	err = sync.SyncPolicy(context.Background(), "test-policy", "latest")
+	fetched, err := sync.SyncPolicy(context.Background(), "test-policy", "latest")
 	require.NoError(t, err)
+	assert.True(t, fetched, "first sync should report a fetch")
 
 	storePath := cacheMgr.PolicyStorePath("test-policy")
 	assert.FileExists(t, filepath.Join(storePath, "oci-layout"))
@@ -172,8 +179,9 @@ func TestSync_RedownloadAfterDeletion(t *testing.T) {
 	require.NoError(t, err)
 	sync2 := cache.NewSync(cacheMgr, state2, mock)
 
-	err = sync2.SyncPolicy(context.Background(), "test-policy", "latest")
+	fetched2, err := sync2.SyncPolicy(context.Background(), "test-policy", "latest")
 	require.NoError(t, err)
+	assert.True(t, fetched2, "re-download after deletion should report a fetch")
 
 	assert.FileExists(t, filepath.Join(storePath, "oci-layout"))
 	assert.DirExists(t, filepath.Join(storePath, "blobs", "sha256"))
@@ -206,19 +214,19 @@ func TestSync_StressConcurrentFailures(t *testing.T) {
 		if i%3 == 0 {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			syncErr := syncMgr.SyncPolicy(ctx, policyID, "latest")
+			_, syncErr := syncMgr.SyncPolicy(ctx, policyID, "latest")
 			if syncErr != nil {
 				failCount++
 			} else {
 				successCount++
 			}
 		} else if i%7 == 0 {
-			syncErr := syncMgr.SyncPolicy(context.Background(),
+			_, syncErr := syncMgr.SyncPolicy(context.Background(),
 				fmt.Sprintf("nonexistent-%d", i), "latest")
 			require.Error(t, syncErr, "nonexistent policy must fail on iteration %d", i)
 			failCount++
 		} else {
-			syncErr := syncMgr.SyncPolicy(context.Background(), policyID, "latest")
+			_, syncErr := syncMgr.SyncPolicy(context.Background(), policyID, "latest")
 			require.NoError(t, syncErr, "normal sync must not fail on iteration %d", i)
 			successCount++
 		}
@@ -299,7 +307,7 @@ func TestSync_SHA384Digest(t *testing.T) {
 
 	// Pass a sha384 digest as the version string. classifyVersion must
 	// detect it as a digest and BuildLookupRef must use "@" separator.
-	_ = sync.SyncPolicy(context.Background(), "test-policy", sha384Digest)
+	_, _ = sync.SyncPolicy(context.Background(), "test-policy", sha384Digest)
 
 	assert.Contains(t, mock.LastLookupRef, "@"+sha384Digest,
 		"sha384 digest must use @ separator, not : separator")

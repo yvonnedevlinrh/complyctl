@@ -62,6 +62,20 @@ threats:
           digest pinning allow a compromised or man-in-the-middle registry to serve
           malicious catalog, guidance, or policy layers. The cache sync stores whatever
           the registry serves without verifying content against a known-good digest.
+      mitigations:
+          - id: CT.COMPLYCTL.THR02.MIT01
+            status: implemented
+            description: >
+                complyctl get emits a NOTE to stderr when a freshly fetched policy
+                or complypack was fetched without signature verification, directing
+                users to the planned sigstore-go integration (#643) and advising
+                them to ensure policy sources are trusted.
+          - id: CT.COMPLYCTL.THR02.MIT03
+            status: implemented
+            description: >
+                complyctl list surfaces a DIGEST column from cache state, giving
+                operators CLI-level visibility into the OCI manifest digest of each
+                cached policy.
       capabilities:
           - reference-id: CCC
             entries:
